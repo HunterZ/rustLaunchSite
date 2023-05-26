@@ -1,8 +1,7 @@
-rustLaunchSite license information:
-
+/*
 MIT License
 
-Copyright (c) 2023 Ben S. aka "HunterZ"
+Copyright (c) 2020 Evgeny Kislov
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,15 +20,22 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+*/
 
+#ifndef CTRLC_H_EVGENY_KISLOV_20200401
+#define CTRLC_H_EVGENY_KISLOV_20200401
 
-Dependency license information:
+#include <functional>
 
-Use of FOSS dependencies is intended to be in good faith. Here are links to their respective licenses:
-- Boost (custom): https://www.boost.org/users/license.html
-- Ctrl+C (MIT): See `ctrl-c/LICENSE`
-- ixwebsocket (BSD3): https://github.com/machinezone/IXWebSocket/blob/master/LICENSE.txt
-- kubazip (PD): https://github.com/kuba--/zip/blob/master/UNLICENSE
-- libcurl (custom): https://github.com/curl/curl/blob/master/COPYING
-- libconfig (LGPL): https://github.com/hyperrealm/libconfig/blob/master/LICENSE
-- nlohmann_json (MIT): https://github.com/nlohmann/json/blob/develop/LICENSE.MIT
+namespace CtrlCLibrary {
+  enum CtrlSignal {
+    kCtrlCSignal = 0,
+  };
+
+  const unsigned int kErrorID = 0;
+
+  unsigned int SetCtrlCHandler(std::function<bool(enum CtrlSignal)> handler);
+  void ResetCtrlCHandler(unsigned int id);
+}
+
+#endif // CTRLC_H_EVGENY_KISLOV_20200401
