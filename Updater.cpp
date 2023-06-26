@@ -4,12 +4,16 @@
 #include "Downloader.h"
 
 #include <boost/process.hpp>
+#include <boost/property_tree/info_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <kubazip/zip/zip.h>
 #include <nlohmann/json.hpp>
 #include <pugixml.hpp>
+#include <sstream>
+#include <stdexcept>
 #include <system_error>
 #include <unistd.h>
 #include <utility>
@@ -44,6 +48,13 @@ namespace
     std::cout << "Extracted file " << ++status.first << "/" << status.second << ": " << filenamePtr << std::endl;
     return 0;
   }
+
+  enum class SteamCmdReadState
+  {
+    FIND_INFO_START,
+    FIND_INFO_END,
+    COMPLETE
+  };
 }
 
 namespace rustLaunchSite
@@ -355,33 +366,123 @@ namespace rustLaunchSite
 
   std::string Updater::GetLatestServerBuild(const std::string& branch)
   {
-    // download SteamCMD info file, then parse XML
     std::string retVal;
-    if (!downloaderUptr_)
+    // abort if any required path is empty, meaning it failed validation
+    if (serverInstallPath_.empty() || steamCmdPath_.empty())
     {
-      std::cout << "ERROR: Downloader handle is null" << std::endl;
+      std::cout << "ERROR: Cannot check for server updates because install and/or steamcmd path is invalid" << std::endl;
       return retVal;
     }
-    const std::string& steamInfo(
-      downloaderUptr_->GetUrlToString("https://api.steamcmd.net/v1/info/258550")
+    // write a script for steamcmd to run
+    // this is needed because steamcmd acts very buggy when I try to use other
+    //  methods
+    // TODO: this should go in RLS' data directory, not the server's
+    const std::string scriptFilePath(serverInstallPath_ + "\\steamcmd.scr");
+    std::ofstream scriptFile(scriptFilePath, std::ios::trunc);
+    if (!scriptFile.is_open())
+    {
+      std::cout << "ERROR: Failed to open steamcmd script file `" << scriptFilePath << "`" << std::endl;
+      return retVal;
+    }
+    scriptFile
+      << "force_install_dir " << serverInstallPath_ << "\n"
+      << "login anonymous\n"
+      << "app_info_update 1\n"
+      << "app_info_print 258550\n"
+      << "quit\n"
+    ;
+    scriptFile.close();
+    // launch steamcmd and extract desired info
+    boost::process::ipstream fromChild; // from child to RLS
+    std::error_code errorCode;
+    boost::process::child sc(
+      boost::process::exe(steamCmdPath_),
+      boost::process::args({"+runscript", scriptFilePath}),
+      boost::process::std_out > fromChild,
+      boost::process::error(errorCode)
     );
-    if (steamInfo.empty())
+    // this will hold the extracted info blob as a string
+    std::string steamInfo;
+    // this will hold the most recently read line of output from steamcmd
+    std::string line;
+    // track info blob extraction status
+    SteamCmdReadState readState(SteamCmdReadState::FIND_INFO_START);
+    // now process output from steamcmd one line at a time
+    // NOTE: Boost.Process docs say not to read from steam unless app is
+    //  running, but this truncates the output so F that - we do what works!
+    while (/*sc.running() &&*/ std::getline(fromChild, line))
     {
-      std::cout << "ERROR: Failed to download server build info" << std::endl;
+      bool appendLine(false);
+      if (line.empty()) continue;
+      switch (readState)
+      {
+        case SteamCmdReadState::FIND_INFO_START:
+        {
+          // looking for "258550" (in double quotes, at start of line)
+          if (!line.empty() && line[0] == '\"' && line.find("\"258550\"") == 0)
+          {
+            appendLine = true;
+            readState = SteamCmdReadState::FIND_INFO_END;
+          }
+          break;
+        }
+        case SteamCmdReadState::FIND_INFO_END:
+        {
+          // append all lines in this mode
+          appendLine = true;
+          // looking for "}" as the first character to signal info blob end
+          if (!line.empty() && line[0] == '}')
+          {
+            readState = SteamCmdReadState::COMPLETE;
+          }
+          break;
+        }
+        case SteamCmdReadState::COMPLETE:
+        {
+          appendLine = false;
+          break;
+        }
+      }
+      if (appendLine)
+      {
+        steamInfo.append(line).append("\n");
+      }
+    }
+    sc.wait(errorCode);
+    // report any process errors
+    if (errorCode)
+    {
+      std::cout << "WARNING: Error running server update command: " << errorCode.message() << std::endl;
+    }
+    const int exitCode(sc.exit_code());
+    if (exitCode)
+    {
+      std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode << std::endl;
+    }
+    // audit output
+    if (readState != SteamCmdReadState::COMPLETE)
+    {
+      std::cout << "ERROR: SteamCMD output did not include a valid app info tree" << std::endl;
       return retVal;
     }
-    // should have received a JSON document
-    // parse it to a flattened version where every key is a slash-delimited path
-    const nlohmann::json j(nlohmann::json::parse(steamInfo).flatten());
-    std::string path("/data/258550/depots/branches/");
-    path.append(branch.empty() ? "public" : branch).append("/buildid");
-    if (!j.contains(path))
+    // process output
+    std::stringstream ss(steamInfo);
+    try
     {
-      std::cout << "ERROR: Failed to locate server build info JSON path: " << path << std::endl;
-      return retVal;
+      boost::property_tree::ptree tree;
+      boost::property_tree::read_info(ss, tree);
+      retVal = tree.get<std::string>(
+        std::string("258550.depots.branches.") +
+        (branch.empty() ? "public" : branch) +
+        ".buildid"
+      );
     }
-    // nlohmann::json apparently strips the double quotes off automatically
-    return j[path].get<std::string>();
+    catch (const std::exception& ex)
+    {
+      std::cout << "ERROR: Exception parsing SteamCMD output: " << ex.what() << std::endl;
+      retVal.clear();
+    }
+    return retVal;
   }
 
   std::string Updater::GetLatestOxideVersion()
