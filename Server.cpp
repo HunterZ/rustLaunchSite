@@ -181,7 +181,7 @@ namespace rustLaunchSite
 
   Server::~Server()
   {
-    if (IsRunning()) { Stop("Unexpected server manage failure"); }
+    if (IsRunning()) { Stop("Unexpected server manager failure"); }
   }
 
   Server::Info Server::GetInfo()

@@ -72,10 +72,15 @@ namespace rustLaunchSite
 
     private:
 
-      // Open Steam app manifest file, find first instance of specified key, and
-      //  return corresponding value with double quotes stripped off. Returns
-      //  empty string if key not found.
-      std::string GetAppManifestValue(const std::string& key);
+      // Open Steam app manifest file at given path, find key with given
+      //  period-delimited path, and return corresponding value with double
+      //  quotes stripped off.
+      // Returns empty string on error or key not found.
+      // Logs a warning if warn=true (default) and the specified path could not
+      //  be found.
+      static std::string GetAppManifestValue(
+        const std::string& appManifestPath, const std::string& keyPath,
+        const bool warn = true);
 
       // Get version number of the current Oxide installation, or empty if not
       //  found

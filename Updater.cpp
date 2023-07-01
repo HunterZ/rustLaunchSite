@@ -87,7 +87,7 @@ namespace rustLaunchSite
       if (std::filesystem::exists(appManifestPath_))
       {
         // extract SteamCMD utility path from manifest
-        steamCmdPath_ = GetAppManifestValue("LauncherPath");
+        steamCmdPath_ = GetAppManifestValue(appManifestPath_, "AppState.LauncherPath");
         if (steamCmdPath_.empty())
         {
           std::cout << "WARNING: Failed to locate SteamCMD path from manifest file " << appManifestPath_ << "; automatic Steam updates disabled" << std::endl;
@@ -280,36 +280,34 @@ namespace rustLaunchSite
     // std::cout << "Server update successful" << std::endl;
   }
 
-  std::string Updater::GetAppManifestValue(const std::string& key)
+  std::string Updater::GetAppManifestValue(
+    const std::string& appManifestPath, const std::string& keyPath,
+    const bool warn)
   {
     std::string retVal;
-    // now derive steamcmd's path from the app manifest
-    std::ifstream appManifestFile(appManifestPath_);
-    if (!appManifestFile.is_open() || !appManifestFile)
+
+    try
     {
-      std::cout << "ERROR: Cannot open/read app manifest file: " << appManifestPath_ << std::endl;
-      return retVal;
+      boost::property_tree::ptree tree;
+      boost::property_tree::read_info(appManifestPath, tree);
+      retVal = tree.get<std::string>(keyPath);
+    }
+    catch (const boost::property_tree::ptree_bad_path& ex)
+    {
+      if (warn)
+      {
+        std::cout << "WARNING: Exception parsing server app manifest: " << ex.what() << std::endl;
+      }
+      retVal.clear();
+    }
+    catch (const std::exception& ex)
+    {
+      std::cout << "WARNING: Exception parsing server app manifest: " << ex.what() << std::endl;
+      retVal.clear();
     }
 
-    // search the file for the steamcmd info
-    // should be a tab, key in double quotes, 2 tabs, and then the target value
-    //  in double quotes
-    std::string line;
-    const std::string quotedKey(std::string("\"") + key + "\"");
-    while (std::getline(appManifestFile, line))
-    {
-      std::size_t index(line.find(quotedKey));
-      if (index == std::string::npos) { continue; }
-      // found the line of interest - now find the value
-      index = line.find('\"', index + quotedKey.length());
-      if (index == std::string::npos) { continue; }
-      ++index;
-      std::size_t endIndex(line.find('\"', index));
-      if (endIndex == std::string::npos) { continue; }
-      retVal = line.substr(index, endIndex - index);
-      break;
-    }
-    appManifestFile.close();
+    // std::cout << "*** " << appManifestPath << " @ " << keyPath << " = " << retVal << std::endl;
+
     return retVal;
   }
 
@@ -356,12 +354,12 @@ namespace rustLaunchSite
 
   std::string Updater::GetInstalledServerBranch()
   {
-    return GetAppManifestValue("BetaKey");
+    return GetAppManifestValue(appManifestPath_, "AppState.UserConfig.BetaKey", false);
   }
 
   std::string Updater::GetInstalledServerBuild()
   {
-    return GetAppManifestValue("buildid");
+    return GetAppManifestValue(appManifestPath_, "AppState.buildid");
   }
 
   std::string Updater::GetLatestServerBuild(const std::string& branch)
