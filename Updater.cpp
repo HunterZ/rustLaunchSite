@@ -38,14 +38,14 @@ namespace
     return (0 == access(path.c_str(), W_OK));
   }
 
-  typedef std::pair<ssize_t, ssize_t> ZipStatus;
+  using ZipStatus = std::pair<ssize_t, ssize_t>;
   int ZipExtractCallback(const char* filenamePtr, void* argPtr)
   {
     ZipStatus dummyStatus;
-    ZipStatus* statusPtr(reinterpret_cast<ZipStatus*>(argPtr));
+    auto* statusPtr(reinterpret_cast<ZipStatus*>(argPtr));
     if (!statusPtr) { statusPtr = &dummyStatus; }
     ZipStatus& status(*statusPtr);
-    std::cout << "Extracted file " << ++status.first << "/" << status.second << ": " << filenamePtr << std::endl;
+    std::cout << "Extracted file " << ++status.first << "/" << status.second << ": " << filenamePtr<< "\n";
     return 0;
   }
 
@@ -90,19 +90,19 @@ namespace rustLaunchSite
         steamCmdPath_ = GetAppManifestValue(appManifestPath_, "AppState.LauncherPath");
         if (steamCmdPath_.empty())
         {
-          std::cout << "WARNING: Failed to locate SteamCMD path from manifest file " << appManifestPath_ << "; automatic Steam updates disabled" << std::endl;
+          std::cout << "WARNING: Failed to locate SteamCMD path from manifest file " << appManifestPath_ << "; automatic Steam updates disabled\n";
           serverUpdateCheck_ = false;
         }
         else if (!std::filesystem::exists(steamCmdPath_))
         {
-          std::cout << "WARNING: Failed to locate SteamCMD at manifest file specified path " << steamCmdPath_ << "; automatic Steam updates disabled" << std::endl;
+          std::cout << "WARNING: Failed to locate SteamCMD at manifest file specified path " << steamCmdPath_ << "; automatic Steam updates disabled\n";
           steamCmdPath_.clear();
           serverUpdateCheck_ = false;
         }
       }
       else
       {
-        std::cout << "WARNING: Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled" << std::endl;
+        std::cout << "WARNING: Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled\n";
         appManifestPath_.clear();
         serverUpdateCheck_ = false;
       }
@@ -113,40 +113,38 @@ namespace rustLaunchSite
       oxideDllPath_ = serverInstallPath_ + "RustDedicated_Data\\Managed\\Oxide.Rust.dll";
       if (!std::filesystem::exists(oxideDllPath_))
       {
-        std::cout << "WARNING: Main Oxide DLL not found at " << oxideDllPath_ << "; automatic Oxide updates disabled" << std::endl;
+        std::cout << "WARNING: Main Oxide DLL not found at " << oxideDllPath_ << "; automatic Oxide updates disabled\n";
         oxideDllPath_.clear();
         oxideUpdateCheck_ = false;
       }
       else if (!IsDirectory(downloadPath_))
       {
-        std::cout << "WARNING: Configured download path " << downloadPath_ << " is not a directory; automatic Oxide updates disabled" << std::endl;
+        std::cout << "WARNING: Configured download path " << downloadPath_ << " is not a directory; automatic Oxide updates disabled\n";
         oxideDllPath_.clear();
         downloadPath_.clear();
         oxideUpdateCheck_ = false;
       }
       else if (!IsWritable(downloadPath_))
       {
-        std::cout << "WARNING: Configured download path " << downloadPath_ << " is not writable; automatic Oxide updates disabled" << std::endl;
+        std::cout << "WARNING: Configured download path " << downloadPath_ << " is not writable; automatic Oxide updates disabled\n";
         oxideDllPath_.clear();
         downloadPath_.clear();
         oxideUpdateCheck_ = false;
       }
     }
 
-    // std::cout << "Updater initialized. Server updates " << (serverUpdateCheck_ ? "enabled" : "disabled") << ". Oxide updates " << (oxideUpdateCheck_ ? "enabled" : "disabled") << std::endl;
+    // std::cout << "Updater initialized. Server updates " << (serverUpdateCheck_ ? "enabled" : "disabled") << ". Oxide updates " << (oxideUpdateCheck_ ? "enabled" : "disabled")<< "\n";
   }
 
-  Updater::~Updater()
-  {
-  }
+  Updater::~Updater() = default;
 
   bool Updater::CheckOxide()
   {
     if (!oxideUpdateCheck_) { return false; }
     const std::string& currentOxideVersion(GetInstalledOxideVersion());
-    // std::cout << "Installed Oxide version: '" << currentOxideVersion << "'" << std::endl;
+    std::cout << "CheckOxide(): Installed Oxide version: '" << currentOxideVersion << "'\n";
     const std::string& latestOxideVersion(GetLatestOxideVersion());
-    // std::cout << "Latest Oxide version: '" << latestOxideVersion << "'" << std::endl;
+    std::cout << "CheckOxide(): Latest Oxide version: '" << latestOxideVersion << "'\n";
     return (
       !currentOxideVersion.empty() && !latestOxideVersion.empty() &&
       currentOxideVersion != latestOxideVersion
@@ -157,11 +155,11 @@ namespace rustLaunchSite
   {
     if (!serverUpdateCheck_) { return false; }
     const std::string& currentServerVersion(GetInstalledServerBuild());
-    // std::cout << "Installed Server version: '" << currentServerVersion << "'" << std::endl;
+    std::cout << "CheckServer(): Installed Server version: '" << currentServerVersion << "'\n";
     const std::string& latestServerVersion(
       GetLatestServerBuild(GetInstalledServerBranch())
     );
-    // std::cout << "Latest Server version: '" << latestServerVersion << "'" << std::endl;
+    std::cout << "CheckServer(): Latest Server version: '" << latestServerVersion << "'\n";
     return (
       !currentServerVersion.empty() && !latestServerVersion.empty() &&
       currentServerVersion != latestServerVersion
@@ -170,31 +168,34 @@ namespace rustLaunchSite
 
   void Updater::UpdateOxide(const bool suppressWarning)
   {
-    // abort if any required path is empty, meaning it failed validation
-    if (downloadPath_.empty() || serverInstallPath_.empty())
-    {
-      std::cout << "ERROR: Cannot update Oxide because download and/or server install path is invalid" << std::endl;
-      return;
-    }
     // abort if Oxide was not already installed
     if (oxideDllPath_.empty())
     {
       if (!suppressWarning)
       {
-        std::cout << "WARNING: Cannot update Oxide because a previous installation was not detected" << std::endl;
+        std::cout << "WARNING: Cannot update Oxide because a previous installation was not detected\n";
       }
       return;
     }
 
-    const std::string zipFile(downloadPath_ + "oxide.zip");
+    // abort if any required path is empty, meaning it failed validation
+    if (downloadPath_.empty() || serverInstallPath_.empty())
+    {
+      std::cout << "ERROR: Cannot update Oxide because download and/or server install path is invalid\n";
+      return;
+    }
 
     // download latest Oxide release
-    // TODO: URL is hardcoded for now, but maybe we should discover it via RSS?
-    if (!downloaderUptr_->GetUrlToFile(
-      zipFile, "https://umod.org/games/rust/download?tag=public"
-    ))
+    const auto& zipFile(downloadPath_ + "oxide.zip");
+    const auto& url{GetLatestOxideURL()};
+    if (url.empty())
     {
-      std::cout << "ERROR: Failed to download Oxide" << std::endl;
+      std::cout << "WARNING: Cannot update Oxide because download URL was not found\n";
+      return;
+    }
+    if (!downloaderUptr_->GetUrlToFile(zipFile, url))
+    {
+      std::cout << "ERROR: Failed to download Oxide\n";
       std::filesystem::remove(zipFile);
       return;
     }
@@ -203,7 +204,7 @@ namespace rustLaunchSite
     zip_t* zipPtr(zip_open(zipFile.c_str(), 0, 'r'));
     if (!zipPtr)
     {
-      std::cout << "ERROR: Failed to open Oxide zip" << std::endl;
+      std::cout << "ERROR: Failed to open Oxide zip\n";
       std::filesystem::remove(zipFile);
       return;
     }
@@ -211,7 +212,7 @@ namespace rustLaunchSite
     zip_close(zipPtr);
     if (zipEntries <= 0)
     {
-      std::cout << "ERROR: Failed to get valid file count from Oxide zip: " << zip_strerror(zipEntries) << std::endl;
+      std::cout << "ERROR: Failed to get valid file count from Oxide zip: " << zip_strerror(zipEntries)<< "\n";
       std::filesystem::remove(zipFile);
       return;
     }
@@ -222,11 +223,11 @@ namespace rustLaunchSite
     ));
     if (extractResult)
     {
-      std::cout << "ERROR: Failed to extract Oxide zip: " << zip_strerror(extractResult) << std::endl;
+      std::cout << "ERROR: Failed to extract Oxide zip: " << zip_strerror(extractResult)<< "\n";
     }
     else
     {
-      // std::cout << "Oxide update successful" << std::endl;
+      // std::cout << "Oxide update successful\n";
     }
 
     // remove the zip either way
@@ -238,7 +239,7 @@ namespace rustLaunchSite
     // abort if any required path is empty, meaning it failed validation
     if (serverInstallPath_.empty() || steamCmdPath_.empty())
     {
-      std::cout << "ERROR: Cannot update server because install and/or steamcmd path is invalid" << std::endl;
+      std::cout << "ERROR: Cannot update server because install and/or steamcmd path is invalid\n";
       return;
     }
 
@@ -250,17 +251,17 @@ namespace rustLaunchSite
     const std::string& betaKey(GetInstalledServerBranch());
     if (!betaKey.empty())
     {
-      args.push_back("-beta");
+      args.emplace_back("-beta");
       args.push_back(betaKey);
     }
-    args.push_back("validate");
-    args.push_back("+quit");
+    args.emplace_back("validate");
+    args.emplace_back("+quit");
     // std::cout << "Invoking SteamCMD with args:";
     // for (const auto& a : args)
     // {
     //   std::cout << " " << a;
     // }
-    // std::cout << std::endl;
+    // std::cout<< "\n";
     std::error_code errorCode;
     const int exitCode(boost::process::system(
       boost::process::exe(steamCmdPath_),
@@ -269,15 +270,15 @@ namespace rustLaunchSite
     ));
     if (errorCode)
     {
-      std::cout << "WARNING: Error running server update command: " << errorCode.message() << std::endl;
+      std::cout << "WARNING: Error running server update command: " << errorCode.message()<< "\n";
       return;
     }
     if (exitCode)
     {
-      std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode << std::endl;
+      std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode<< "\n";
       return;
     }
-    // std::cout << "Server update successful" << std::endl;
+    // std::cout << "Server update successful\n";
   }
 
   std::string Updater::GetAppManifestValue(
@@ -296,22 +297,22 @@ namespace rustLaunchSite
     {
       if (warn)
       {
-        std::cout << "WARNING: Exception parsing server app manifest: " << ex.what() << std::endl;
+        std::cout << "WARNING: Exception parsing server app manifest: " << ex.what()<< "\n";
       }
       retVal.clear();
     }
     catch (const std::exception& ex)
     {
-      std::cout << "WARNING: Exception parsing server app manifest: " << ex.what() << std::endl;
+      std::cout << "WARNING: Exception parsing server app manifest: " << ex.what()<< "\n";
       retVal.clear();
     }
 
-    // std::cout << "*** " << appManifestPath << " @ " << keyPath << " = " << retVal << std::endl;
+    // std::cout << "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "\n";
 
     return retVal;
   }
 
-  std::string Updater::GetInstalledOxideVersion()
+  std::string Updater::GetInstalledOxideVersion() const
   {
     std::string retVal;
     if (oxideDllPath_.empty()) { return retVal; }
@@ -322,7 +323,7 @@ namespace rustLaunchSite
     const auto psPath(boost::process::search_path("powershell.exe"));
     if (psPath.empty())
     {
-      std::cout << "ERROR: Failed to find powershell" << std::endl;
+      std::cout << "ERROR: Failed to find powershell\n";
       return retVal;
     }
     std::error_code errorCode;
@@ -337,38 +338,39 @@ namespace rustLaunchSite
     ));
     if (errorCode)
     {
-      std::cout << "ERROR: Error running Oxide version check command: " << errorCode.message() << std::endl;
+      std::cout << "ERROR: Error running Oxide version check command: " << errorCode.message()<< "\n";
       return retVal;
     }
     if (exitCode)
     {
-      std::cout << "ERROR: Powershell returned nonzero exit code: " << exitCode << std::endl;
+      std::cout << "ERROR: Powershell returned nonzero exit code: " << exitCode<< "\n";
       return retVal;
     }
     // grab first line of output stream into retVal string
     std::getline(inStream, retVal);
     // for some reason this has a newline at the end, so strip that off
     while (retVal.back() == '\r' || retVal.back() == '\n') { retVal.pop_back(); }
-    return retVal;
+    // strip off anything starting with `+` if present
+    return retVal.substr(0, retVal.find('+'));
   }
 
-  std::string Updater::GetInstalledServerBranch()
+  std::string Updater::GetInstalledServerBranch() const
   {
     return GetAppManifestValue(appManifestPath_, "AppState.UserConfig.BetaKey", false);
   }
 
-  std::string Updater::GetInstalledServerBuild()
+  std::string Updater::GetInstalledServerBuild() const
   {
     return GetAppManifestValue(appManifestPath_, "AppState.buildid");
   }
 
-  std::string Updater::GetLatestServerBuild(const std::string& branch)
+  std::string Updater::GetLatestServerBuild(const std::string& branch) const
   {
     std::string retVal;
     // abort if any required path is empty, meaning it failed validation
     if (serverInstallPath_.empty() || steamCmdPath_.empty())
     {
-      std::cout << "ERROR: Cannot check for server updates because install and/or steamcmd path is invalid" << std::endl;
+      std::cout << "ERROR: Cannot check for server updates because install and/or steamcmd path is invalid\n";
       return retVal;
     }
     // write a script for steamcmd to run
@@ -379,7 +381,7 @@ namespace rustLaunchSite
     std::ofstream scriptFile(scriptFilePath, std::ios::trunc);
     if (!scriptFile.is_open())
     {
-      std::cout << "ERROR: Failed to open steamcmd script file `" << scriptFilePath << "`" << std::endl;
+      std::cout << "ERROR: Failed to open steamcmd script file `" << scriptFilePath << "`\n";
       return retVal;
     }
     scriptFile
@@ -450,17 +452,17 @@ namespace rustLaunchSite
     // report any process errors
     if (errorCode)
     {
-      std::cout << "WARNING: Error running server update command: " << errorCode.message() << std::endl;
+      std::cout << "WARNING: Error running server update command: " << errorCode.message()<< "\n";
     }
     const int exitCode(sc.exit_code());
     if (exitCode)
     {
-      std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode << std::endl;
+      std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode<< "\n";
     }
     // audit output
     if (readState != SteamCmdReadState::COMPLETE)
     {
-      std::cout << "ERROR: SteamCMD output did not include a valid app info tree" << std::endl;
+      std::cout << "ERROR: SteamCMD output did not include a valid app info tree\n";
       return retVal;
     }
     // process output
@@ -477,55 +479,73 @@ namespace rustLaunchSite
     }
     catch (const std::exception& ex)
     {
-      std::cout << "ERROR: Exception parsing SteamCMD output: " << ex.what() << std::endl;
+      std::cout << "ERROR: Exception parsing SteamCMD output: " << ex.what()<< "\n";
       retVal.clear();
     }
     return retVal;
   }
 
-  std::string Updater::GetLatestOxideVersion()
+  std::string Updater::GetLatestOxideURL() const
   {
-    std::string retVal;
     if (!downloaderUptr_)
     {
-      std::cout << "ERROR: Downloader handle is null" << std::endl;
-      return retVal;
+      std::cout << "ERROR: Downloader handle is null\n";
+      return {};
     }
     const std::string& oxideInfo(
-      downloaderUptr_->GetUrlToString("https://umod.org/games/rust.rss")
+      downloaderUptr_->GetUrlToString("https://api.github.com/repos/OxideMod/Oxide.Rust/releases/latest")
     );
-    pugi::xml_document xmlDoc;
-    const auto& xmlParseResult(xmlDoc.load_string(oxideInfo.c_str()));
-    if (!xmlParseResult)
+
+    try
     {
-      std::cout << "ERROR: XML parse error: " << xmlParseResult.description() << std::endl;
-      return retVal;
+      const auto& j(nlohmann::json::parse(oxideInfo));
+      // "assets" node is a list of release files
+      // there's usually a Linux release that we want to ignore for now
+      // TODO: choose the linux version when appropriate if RLS ever gets
+      //  ported to that OS
+      for (const auto& asset : j["assets"])
+      {
+        if (asset["name"] == "Oxide.Rust.zip")
+        {
+          return asset["browser_download_url"];
+        }
+      }
     }
-    // there should be a "feed" node with a list of "entry" (plus other) nodes
-    //  under it. Under each "entry" node (among other things) is something
-    //  like:
-    //
-    //   <title type="text"><![CDATA[2.0.5800]]></title>
-    //
-    //  ...and:
-    //
-    //   <id>https://umod.org/games/rust/download?tag=public</id>
-    //
-    // for now, it should be sufficient to extract the `CDATA` values as
-    //  lexicographically-comparable version strings, then find the largest one
-    //  and optionally grab its siblilng `id` value for a download URL
-    auto xmlFeedNode(xmlDoc.child("feed"));
-    if (!xmlFeedNode)
+    catch (const nlohmann::json::exception& e)
     {
-      std::cout << "ERROR: No `feed` node under Oxide RSS XML root" << std::endl;
-      return retVal;
-    }
-    for (auto xmlEntryNode : xmlFeedNode.children("entry"))
-    {
-      const std::string value(xmlEntryNode.child_value("title"));
-      if (retVal.empty() || value > retVal) { retVal = std::move(value); }
+      std::cout << "ERROR: Exception extracting download URL from Oxide releases JSON: " << e.what() << "\n";
+      std::cout << "Input string: '" << oxideInfo << "'\n";
+      return {};
     }
 
-    return retVal;
+    std::cout << "ERROR: Failed to extract download URL from Oxide releases JSON\n";
+    return {};
+  }
+
+  std::string Updater::GetLatestOxideVersion() const
+  {
+    if (!downloaderUptr_)
+    {
+      std::cout << "ERROR: Downloader handle is null\n";
+      return {};
+    }
+    const std::string& oxideInfo(
+      downloaderUptr_->GetUrlToString("https://api.github.com/repos/OxideMod/Oxide.Rust/releases/latest")
+    );
+
+    try
+    {
+      const auto& j(nlohmann::json::parse(oxideInfo));
+      return j["name"];
+    }
+    catch(const nlohmann::json::exception& e)
+    {
+      std::cout << "ERROR: Exception extracting version name from Oxide releases JSON: " << e.what() << "\n";
+      std::cout << "Input string: '" << oxideInfo << "'\n";
+      return {};
+    }
+
+    std::cout << "ERROR: Failed to extract version name from Oxide releases JSON\n";
+    return {};
   }
 }

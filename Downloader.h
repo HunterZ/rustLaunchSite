@@ -29,7 +29,7 @@ namespace rustLaunchSite
       /// @brief Download specified URL contents to a string
       /// @param url URL whose contents should be downloaded
       /// @return Contents retrieved from URL, or empty string on failure
-      std::string GetUrlToString(const std::string& url);
+      std::string GetUrlToString(const std::string& url) const;
 
       /// @brief Download specified URL contents to a file
       /// @details The file will be truncated prior to download attempt.
@@ -38,8 +38,6 @@ namespace rustLaunchSite
       /// @return @c true on success, @c false on failure
       bool GetUrlToFile(const std::string& file, const std::string& url);
 
-    protected:
-
     private:
 
       // disabled constructors/operators
@@ -47,8 +45,10 @@ namespace rustLaunchSite
       Downloader(const Downloader&) = delete;
       Downloader& operator= (const Downloader&) = delete;
 
+      static std::shared_ptr<rustLaunchSite::DownloaderInitHandle> GetDownloaderInitHandle();
+
       // handle to manage global (de)init of underlying functionality
-      std::shared_ptr<DownloaderInitHandle> downloaderInitHandleSptr_;
+      std::shared_ptr<DownloaderInitHandle> downloaderInitHandleSptr_ = GetDownloaderInitHandle();
   };
 }
 

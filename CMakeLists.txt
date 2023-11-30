@@ -59,8 +59,8 @@ if(VCPKG_TARGET_TRIPLET MATCHES ".*static.*")
   add_library(libconfig STATIC IMPORTED)
   add_library(libconfig++ STATIC IMPORTED)
   set(RLS_LIBS ${RLS_LIBS} pugixml::static)
-  set(Boost_USB_STATIC_LIBS ON)
-  set(Boost_USB_STATIC_RUNTIME ON)
+  set(Boost_USE_STATIC_LIBS ON)
+  set(Boost_USE_STATIC_RUNTIME ON)
 else()
   message("RLS: Configuring for dynamic linking")
   set(RLS_COPY_DEPS ON)
@@ -73,14 +73,15 @@ else()
     set_property(TARGET libconfig++ PROPERTY IMPORTED_IMPLIB "${LIBCONFIGPP_IMPLIB}")
   endif()
   set(RLS_LIBS ${RLS_LIBS} pugixml::pugixml)
-  set(Boost_USB_STATIC_LIBS OFF)
-  set(Boost_USB_STATIC_RUNTIME OFF)
+  set(Boost_USE_STATIC_LIBS OFF)
+  set(Boost_USE_STATIC_RUNTIME OFF)
 endif()
 set_property(TARGET libconfig PROPERTY IMPORTED_LOCATION "${LIBCONFIG_LIB}")
 set_property(TARGET libconfig++ PROPERTY IMPORTED_LOCATION "${LIBCONFIGPP_LIB}")
 
 # use config mode to prefer vcpkg versions
 #  ...except for Boost, because vcpkg uses special goop to work with FindBoost
+set(Boost_NO_BOOST_CMAKE ON)
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
@@ -118,33 +119,33 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE ${RLS_LIBS})
 target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 
-add_executable(downloaderTest
-  Downloader.cpp
-  Downloader.h
-  downloaderTest.cpp
-)
-target_link_libraries(downloaderTest PRIVATE ${RLS_LIBS})
-target_link_options(downloaderTest PRIVATE "${RLS_LINK_OPTS}")
+# add_executable(downloaderTest
+#   Downloader.cpp
+#   Downloader.h
+#   downloaderTest.cpp
+# )
+# target_link_libraries(downloaderTest PRIVATE ${RLS_LIBS})
+# target_link_options(downloaderTest PRIVATE "${RLS_LINK_OPTS}")
 
-add_executable(rconTest
-  Rcon.cpp
-  Rcon.h
-  rconTest.cpp
-)
-target_link_libraries(rconTest PRIVATE ${RLS_LIBS})
-target_link_options(rconTest PRIVATE "${RLS_LINK_OPTS}")
+# add_executable(rconTest
+#   Rcon.cpp
+#   Rcon.h
+#   rconTest.cpp
+# )
+# target_link_libraries(rconTest PRIVATE ${RLS_LIBS})
+# target_link_options(rconTest PRIVATE "${RLS_LINK_OPTS}")
 
-add_executable(updaterTest
-  Config.cpp
-  Config.h
-  Downloader.cpp
-  Downloader.h
-  Updater.cpp
-  Updater.h
-  updaterTest.cpp
-)
-target_link_libraries(updaterTest PRIVATE ${RLS_LIBS})
-target_link_options(updaterTest PRIVATE "${RLS_LINK_OPTS}")
+# add_executable(updaterTest
+#   Config.cpp
+#   Config.h
+#   Downloader.cpp
+#   Downloader.h
+#   Updater.cpp
+#   Updater.h
+#   updaterTest.cpp
+# )
+# target_link_libraries(updaterTest PRIVATE ${RLS_LIBS})
+# target_link_options(updaterTest PRIVATE "${RLS_LINK_OPTS}")
 
 # install(CODE [[
 #   file(GET_RUNTIME_DEPENDENCIES

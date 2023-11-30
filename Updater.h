@@ -68,8 +68,6 @@ namespace rustLaunchSite
       ///  ensuring the server is not running.
       void UpdateServer();
 
-    protected:
-
     private:
 
       // Open Steam app manifest file at given path, find key with given
@@ -84,24 +82,28 @@ namespace rustLaunchSite
 
       // Get version number of the current Oxide installation, or empty if not
       //  found
-      std::string GetInstalledOxideVersion();
+      std::string GetInstalledOxideVersion() const;
 
       // Get beta/branch of the current rust dedicated server installation, or
       //  empty if not found (which indicates the default "public" branch)
-      std::string GetInstalledServerBranch();
+      std::string GetInstalledServerBranch() const;
 
       // Get build number of the current rust dedicated server installation, or
       //  empty if not found
-      std::string GetInstalledServerBuild();
+      std::string GetInstalledServerBuild() const;
 
       // Get build number of the latest server release available on steam for
       //  the given branch/beta name, or empty if not found. If branch name is
       //  empty, "public" will be assumed
-      std::string GetLatestServerBuild(const std::string& branch = "");
+      std::string GetLatestServerBuild(const std::string& branch = "") const;
 
-      // Get version number of the latest Oxide release available on umod.org,
-      //  or empty if not found
-      std::string GetLatestOxideVersion();
+      // Get download URL for latest Oxide release on GitHub, or empty if not
+      //  found
+      std::string GetLatestOxideURL() const;
+
+      // Get version number of the latest Oxide release available on GitHub, or
+      //  empty if not found
+      std::string GetLatestOxideVersion() const;
 
       // Get client-server protocol version currently running on the server
       // this only needs to be checked on startup; if it changes, the server
