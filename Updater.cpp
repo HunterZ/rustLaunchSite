@@ -6,7 +6,6 @@
 #include <boost/process.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <kubazip/zip/zip.h>
@@ -15,537 +14,722 @@
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
-#include <unistd.h>
-#include <utility>
 #include <vector>
 
 namespace
 {
-  inline bool IsDirectory(const std::string& path)
-  {
-    const auto& targetPath(
-      std::filesystem::is_symlink(path) ?
-        std::filesystem::read_symlink(path) : path
-    );
-    return std::filesystem::is_directory(targetPath);
-  }
+inline bool IsDirectory(const std::filesystem::path& path)
+{
+  const auto& targetPath(
+    std::filesystem::is_symlink(path) ?
+      std::filesystem::read_symlink(path) : path
+  );
+  return std::filesystem::is_directory(targetPath);
+}
 
-  inline bool IsWritable(const std::string& path)
-  {
-    // this sucks and may not work with MSVC, but std::filesystem is garbage in
-    //  this area
-    // (for MSVC, may need to include io.h and use _access() instead?)
-    return (0 == access(path.c_str(), W_OK));
-  }
+inline bool IsWritable(const std::filesystem::path& path)
+{
+  // this sucks and may not work with MSVC, but std::filesystem is garbage in
+  //  this area
+  // (for MSVC, may need to include io.h and use _access() instead?)
+  return (0 == access(path.string().c_str(), W_OK));
+}
 
-  using ZipStatus = std::pair<ssize_t, ssize_t>;
-  int ZipExtractCallback(const char* filenamePtr, void* argPtr)
-  {
-    ZipStatus dummyStatus;
-    auto* statusPtr(reinterpret_cast<ZipStatus*>(argPtr));
-    if (!statusPtr) { statusPtr = &dummyStatus; }
-    ZipStatus& status(*statusPtr);
-    std::cout << "Extracted file " << ++status.first << "/" << status.second << ": " << filenamePtr<< "\n";
-    return 0;
-  }
+using ZipStatus = std::pair<ssize_t, ssize_t>;
+int ZipExtractCallback(const char* filenamePtr, void* argPtr)
+{
+  ZipStatus dummyStatus;
+  auto* statusPtr(static_cast<ZipStatus*>(argPtr));
+  if (!statusPtr) { statusPtr = &dummyStatus; }
+  auto& [count, total] = *statusPtr;
+  ++count;
+  std::cout << "Extracted file " << count << "/" << total << ": " << filenamePtr << "\n";
+  return 0;
+}
 
-  enum class SteamCmdReadState
+enum class SteamCmdReadState
+{
+  FIND_INFO_START,
+  FIND_INFO_END,
+  COMPLETE
+};
+
+enum class ToStringCase
+{
+  LOWER, TITLE, UPPER
+};
+
+const std::vector<std::string_view> FRAMEWORK_STRING_LOWER
+  { "none", "carbon", "oxide" };
+const std::vector<std::string_view> FRAMEWORK_STRING_TITLE
+  { "None", "Carbon", "Oxide" };
+const std::vector<std::string_view> FRAMEWORK_STRING_UPPER
+  { "NONE", "CARBON", "OXIDE" };
+
+std::string_view ToString(
+  const rustLaunchSite::Updater::PluginFramework framework,
+  const ToStringCase stringCase
+)
+{
+  std::size_t index{0};
+  switch (framework)
   {
-    FIND_INFO_START,
-    FIND_INFO_END,
-    COMPLETE
-  };
+    case rustLaunchSite::Updater::PluginFramework::NONE:   index = 0; break;
+    case rustLaunchSite::Updater::PluginFramework::CARBON: index = 1; break;
+    case rustLaunchSite::Updater::PluginFramework::OXIDE:  index = 2; break;
+  }
+  switch (stringCase)
+  {
+    case ToStringCase::LOWER: return FRAMEWORK_STRING_LOWER.at(index);
+    case ToStringCase::TITLE: return FRAMEWORK_STRING_TITLE.at(index);
+    case ToStringCase::UPPER: return FRAMEWORK_STRING_UPPER.at(index);
+  }
+  return {};
+}
+
+rustLaunchSite::Updater::PluginFramework ToFramework(
+  const rustLaunchSite::Config::ModFramework framework
+)
+{
+  // yes, this is a 1:1 mapping, but we don't want a header / public API level
+  //  dependency on Config::ModFramework
+  switch (framework)
+  {
+    case rustLaunchSite::Config::ModFramework::NONE:
+      break;
+    case rustLaunchSite::Config::ModFramework::CARBON:
+      return rustLaunchSite::Updater::PluginFramework::CARBON;
+    case rustLaunchSite::Config::ModFramework::OXIDE:
+      return rustLaunchSite::Updater::PluginFramework::OXIDE;
+  }
+  return rustLaunchSite::Updater::PluginFramework::NONE;
+}
+
+std::filesystem::path GetFrameworkDllPath(
+  const std::filesystem::path& serverInstallPath,
+  const rustLaunchSite::Updater::PluginFramework framework
+)
+{
+  switch (framework)
+  {
+    case rustLaunchSite::Updater::PluginFramework::NONE:
+      break;
+    case rustLaunchSite::Updater::PluginFramework::CARBON:
+      return serverInstallPath / "carbon/managed/Carbon.dll";
+    case rustLaunchSite::Updater::PluginFramework::OXIDE:
+      return serverInstallPath / "RustDedicated_Data/Managed/Oxide.Rust.dll";
+  }
+  return {};
+}
+
+const std::vector<std::string_view> FRAMEWORK_URL
+{
+  // NONE
+  "",
+  // CARBON
+  "https://api.github.com/repos/CarbonCommunity/Carbon/releases/tags/production_build",
+  // OXIDE
+  "https://api.github.com/repos/OxideMod/Oxide.Rust/releases/latest"
+};
+
+std::string_view GetFrameworkURL(
+  const rustLaunchSite::Updater::PluginFramework framework
+)
+{
+  std::size_t index{0};
+  switch (framework)
+  {
+    case rustLaunchSite::Updater::PluginFramework::NONE:   index = 0; break;
+    case rustLaunchSite::Updater::PluginFramework::CARBON: index = 1; break;
+    case rustLaunchSite::Updater::PluginFramework::OXIDE:  index = 2; break;
+  }
+  return FRAMEWORK_URL.at(index);
+}
+
+
+const std::vector<std::string_view> FRAMEWORK_ASSET
+{
+  // NONE
+  "",
+  // CARBON
+  "Carbon.Windows.Release.zip",
+  // OXIDE
+  "Oxide.Rust.zip"
+};
+
+std::string_view GetFrameworkAsset(
+  const rustLaunchSite::Updater::PluginFramework framework
+)
+{
+  std::size_t index{0};
+  switch (framework)
+  {
+    case rustLaunchSite::Updater::PluginFramework::NONE:   index = 0; break;
+    case rustLaunchSite::Updater::PluginFramework::CARBON: index = 1; break;
+    case rustLaunchSite::Updater::PluginFramework::OXIDE:  index = 2; break;
+  }
+  return FRAMEWORK_ASSET.at(index);
+}
 }
 
 namespace rustLaunchSite
 {
-  Updater::Updater(const Config& cfg)
-    : downloaderUptr_(std::make_unique<Downloader>())
-    , serverInstallPath_(cfg.GetInstallPath())
-    , downloadPath_(cfg.GetPathsDownload())
-    , serverUpdateCheck_(cfg.GetUpdateServer())
-    , oxideUpdateCheck_(cfg.GetUpdateOxide())
+Updater::Updater(
+  std::shared_ptr<const Config> cfgSptr,
+  std::shared_ptr<Downloader> downloaderSptr
+)
+  : downloaderSptr_(downloaderSptr)
+  , serverInstallPath_(cfgSptr->GetInstallPath())
+  , downloadPath_(cfgSptr->GetPathsDownload())
+  , serverUpdateCheck_(cfgSptr->GetUpdateServer())
+  , frameworkUpdateCheck_(ToFramework(cfgSptr->GetUpdateModFramework()))
+  , frameworkDllPath_(GetFrameworkDllPath(serverInstallPath_, frameworkUpdateCheck_))
+{
+  // install path must be either a directory, or a symbolic link to one
+  if (!IsDirectory(serverInstallPath_))
   {
-    if (!downloaderUptr_)
-    {
-      throw std::runtime_error("ERROR: Failed to allocate Downloader facility");
-    }
-    // install path must be either a directory, or a symbolic link to one
-    if (!IsDirectory(serverInstallPath_))
-    {
-      throw std::invalid_argument(std::string("ERROR: Server install path does not exist: ") + serverInstallPath_);
-    }
-    if (!std::filesystem::exists(serverInstallPath_ + "RustDedicated.exe"))
-    {
-      throw std::invalid_argument(std::string("ERROR: Rust dedicated server not found in configured install path: ") + serverInstallPath_);
-    }
+    throw std::invalid_argument(std::string("ERROR: Server install path does not exist: ") + serverInstallPath_.string());
+  }
+  if (!std::filesystem::exists(serverInstallPath_ / "RustDedicated.exe"))
+  {
+    throw std::invalid_argument(std::string("ERROR: Rust dedicated server not found in configured install path: ") + serverInstallPath_.string());
+  }
 
-    if (serverUpdateCheck_)
+  if (serverUpdateCheck_)
+  {
+    // derive the Steam app manifest path from the configured install location
+    appManifestPath_ = serverInstallPath_ / "steamapps/appmanifest_258550.acf";
+    if (std::filesystem::exists(appManifestPath_))
     {
-      // derive the Steam app manifest path from the configured install location
-      appManifestPath_ = serverInstallPath_ + "\\steamapps\\appmanifest_258550.acf";
-      if (std::filesystem::exists(appManifestPath_))
+      // extract SteamCMD utility path from manifest
+      steamCmdPath_ = GetAppManifestValue(appManifestPath_, "AppState.LauncherPath");
+      if (steamCmdPath_.empty())
       {
-        // extract SteamCMD utility path from manifest
-        steamCmdPath_ = GetAppManifestValue(appManifestPath_, "AppState.LauncherPath");
-        if (steamCmdPath_.empty())
-        {
-          std::cout << "WARNING: Failed to locate SteamCMD path from manifest file " << appManifestPath_ << "; automatic Steam updates disabled\n";
-          serverUpdateCheck_ = false;
-        }
-        else if (!std::filesystem::exists(steamCmdPath_))
-        {
-          std::cout << "WARNING: Failed to locate SteamCMD at manifest file specified path " << steamCmdPath_ << "; automatic Steam updates disabled\n";
-          steamCmdPath_.clear();
-          serverUpdateCheck_ = false;
-        }
+        std::cout << "WARNING: Failed to locate SteamCMD path from manifest file " << appManifestPath_ << "; automatic Steam updates disabled\n";
+        serverUpdateCheck_ = false;
       }
-      else
+      else if (!std::filesystem::exists(steamCmdPath_))
       {
-        std::cout << "WARNING: Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled\n";
-        appManifestPath_.clear();
+        std::cout << "WARNING: Failed to locate SteamCMD at manifest file specified path " << steamCmdPath_ << "; automatic Steam updates disabled\n";
+        steamCmdPath_.clear();
         serverUpdateCheck_ = false;
       }
     }
-
-    if (oxideUpdateCheck_)
-    {
-      oxideDllPath_ = serverInstallPath_ + "RustDedicated_Data\\Managed\\Oxide.Rust.dll";
-      if (!std::filesystem::exists(oxideDllPath_))
-      {
-        std::cout << "WARNING: Main Oxide DLL not found at " << oxideDllPath_ << "; automatic Oxide updates disabled\n";
-        oxideDllPath_.clear();
-        oxideUpdateCheck_ = false;
-      }
-      else if (!IsDirectory(downloadPath_))
-      {
-        std::cout << "WARNING: Configured download path " << downloadPath_ << " is not a directory; automatic Oxide updates disabled\n";
-        oxideDllPath_.clear();
-        downloadPath_.clear();
-        oxideUpdateCheck_ = false;
-      }
-      else if (!IsWritable(downloadPath_))
-      {
-        std::cout << "WARNING: Configured download path " << downloadPath_ << " is not writable; automatic Oxide updates disabled\n";
-        oxideDllPath_.clear();
-        downloadPath_.clear();
-        oxideUpdateCheck_ = false;
-      }
-    }
-
-    // std::cout << "Updater initialized. Server updates " << (serverUpdateCheck_ ? "enabled" : "disabled") << ". Oxide updates " << (oxideUpdateCheck_ ? "enabled" : "disabled")<< "\n";
-  }
-
-  Updater::~Updater() = default;
-
-  bool Updater::CheckOxide()
-  {
-    if (!oxideUpdateCheck_) { return false; }
-    const std::string& currentOxideVersion(GetInstalledOxideVersion());
-    std::cout << "CheckOxide(): Installed Oxide version: '" << currentOxideVersion << "'\n";
-    const std::string& latestOxideVersion(GetLatestOxideVersion());
-    std::cout << "CheckOxide(): Latest Oxide version: '" << latestOxideVersion << "'\n";
-    return (
-      !currentOxideVersion.empty() && !latestOxideVersion.empty() &&
-      currentOxideVersion != latestOxideVersion
-    );
-  }
-
-  bool Updater::CheckServer()
-  {
-    if (!serverUpdateCheck_) { return false; }
-    const std::string& currentServerVersion(GetInstalledServerBuild());
-    std::cout << "CheckServer(): Installed Server version: '" << currentServerVersion << "'\n";
-    const std::string& latestServerVersion(
-      GetLatestServerBuild(GetInstalledServerBranch())
-    );
-    std::cout << "CheckServer(): Latest Server version: '" << latestServerVersion << "'\n";
-    return (
-      !currentServerVersion.empty() && !latestServerVersion.empty() &&
-      currentServerVersion != latestServerVersion
-    );
-  }
-
-  void Updater::UpdateOxide(const bool suppressWarning)
-  {
-    // abort if Oxide was not already installed
-    if (oxideDllPath_.empty())
-    {
-      if (!suppressWarning)
-      {
-        std::cout << "WARNING: Cannot update Oxide because a previous installation was not detected\n";
-      }
-      return;
-    }
-
-    // abort if any required path is empty, meaning it failed validation
-    if (downloadPath_.empty() || serverInstallPath_.empty())
-    {
-      std::cout << "ERROR: Cannot update Oxide because download and/or server install path is invalid\n";
-      return;
-    }
-
-    // download latest Oxide release
-    const auto& zipFile(downloadPath_ + "oxide.zip");
-    const auto& url{GetLatestOxideURL()};
-    if (url.empty())
-    {
-      std::cout << "WARNING: Cannot update Oxide because download URL was not found\n";
-      return;
-    }
-    if (!downloaderUptr_->GetUrlToFile(zipFile, url))
-    {
-      std::cout << "ERROR: Failed to download Oxide\n";
-      std::filesystem::remove(zipFile);
-      return;
-    }
-
-    // unzip Oxide release into server installation directory
-    zip_t* zipPtr(zip_open(zipFile.c_str(), 0, 'r'));
-    if (!zipPtr)
-    {
-      std::cout << "ERROR: Failed to open Oxide zip\n";
-      std::filesystem::remove(zipFile);
-      return;
-    }
-    const ssize_t zipEntries(zip_entries_total(zipPtr));
-    zip_close(zipPtr);
-    if (zipEntries <= 0)
-    {
-      std::cout << "ERROR: Failed to get valid file count from Oxide zip: " << zip_strerror(zipEntries)<< "\n";
-      std::filesystem::remove(zipFile);
-      return;
-    }
-
-    ZipStatus zipStatus{0, zipEntries};
-    const int extractResult(zip_extract(
-      zipFile.c_str(), serverInstallPath_.c_str(), ZipExtractCallback, &zipStatus
-    ));
-    if (extractResult)
-    {
-      std::cout << "ERROR: Failed to extract Oxide zip: " << zip_strerror(extractResult)<< "\n";
-    }
     else
     {
-      // std::cout << "Oxide update successful\n";
+      std::cout << "WARNING: Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled\n";
+      appManifestPath_.clear();
+      serverUpdateCheck_ = false;
     }
+  }
 
-    // remove the zip either way
+  if (
+    frameworkUpdateCheck_ != PluginFramework::NONE
+    && !std::filesystem::exists(frameworkDllPath_)
+  )
+  {
+    std::cout << "WARNING: " << frameworkDllPath_ << " not found; automatic " << ToString(frameworkUpdateCheck_, ToStringCase::TITLE) << " updates disabled\n";
+    frameworkDllPath_.clear();
+    frameworkUpdateCheck_ = PluginFramework::NONE;
+  }
+
+  if (frameworkUpdateCheck_ != PluginFramework::NONE)
+  {
+    if (!IsDirectory(downloadPath_))
+    {
+      std::cout << "WARNING: Configured download path " << downloadPath_ << " is not a directory; automatic " << ToString(frameworkUpdateCheck_, ToStringCase::TITLE) << " updates disabled\n";
+      downloadPath_.clear();
+      frameworkDllPath_.clear();
+      frameworkUpdateCheck_ = PluginFramework::NONE;
+    }
+    else if (!IsWritable(downloadPath_))
+    {
+      std::cout << "WARNING: Configured download path " << downloadPath_ << " is not writable; automatic " << ToString(frameworkUpdateCheck_, ToStringCase::TITLE) << " updates disabled\n";
+      downloadPath_.clear();
+      frameworkDllPath_.clear();
+      frameworkUpdateCheck_ = PluginFramework::NONE;
+    }
+  }
+
+  // std::cout << "Updater initialized. Server updates " << (serverUpdateCheck_ ? "enabled" : "disabled") << ". Oxide updates " << (oxideUpdateCheck_ ? "enabled" : "disabled")<< "\n";
+}
+
+Updater::~Updater() = default;
+
+bool Updater::CheckFramework() const
+{
+  const auto& frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
+  if (frameworkUpdateCheck_ == PluginFramework::NONE) { return false; }
+  const auto& currentVersion(GetInstalledFrameworkVersion());
+  std::cout << "CheckFramework(): Installed " << frameworkTitle << " version: '" << currentVersion << "'\n";
+  const auto& latestVersion(GetLatestFrameworkVersion());
+  std::cout << "CheckFramework(): Latest " << frameworkTitle << " version: '" << latestVersion << "'\n";
+  return (
+    !currentVersion.empty() && !latestVersion.empty() &&
+    currentVersion != latestVersion
+  );
+}
+
+bool Updater::CheckServer() const
+{
+  if (!serverUpdateCheck_) { return false; }
+  const std::string& currentServerVersion(GetInstalledServerBuild());
+  std::cout << "CheckServer(): Installed Server version: '" << currentServerVersion << "'\n";
+  const std::string& latestServerVersion(
+    GetLatestServerBuild(GetInstalledServerBranch())
+  );
+  std::cout << "CheckServer(): Latest Server version: '" << latestServerVersion << "'\n";
+  return (
+    !currentServerVersion.empty() && !latestServerVersion.empty() &&
+    currentServerVersion != latestServerVersion
+  );
+}
+
+void Updater::UpdateFramework(const bool suppressWarning) const
+{
+  const std::string_view frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
+  // abort if Carbon/Oxide was not already installed
+  // this should also catch the case that this is called when update checking is
+  //  disabled, but we don't explicity support that
+  if (frameworkDllPath_.empty())
+  {
+    if (!suppressWarning)
+    {
+      std::cout << "WARNING: Cannot update " << frameworkTitle << " because a previous installation was not detected\n";
+    }
+    return;
+  }
+
+  // abort if any required path is empty, meaning it failed validation
+  // this is pathological, but this is also meant to be production software
+  if (downloadPath_.empty() || serverInstallPath_.empty())
+  {
+    std::cout << "ERROR: Cannot update " << frameworkTitle << " because download and/or server install path is invalid\n";
+    return;
+  }
+
+  // download latest Carbon/Oxide release
+  const auto& zipFile(downloadPath_ / "carbon.zip");
+  const auto& url{GetLatestFrameworkURL()};
+  if (url.empty())
+  {
+    std::cout << "WARNING: Cannot update " << frameworkTitle << " because download URL was not found\n";
+    return;
+  }
+  if (!downloaderSptr_->GetUrlToFile(zipFile, url))
+  {
+    std::cout << "ERROR: Failed to download " << frameworkTitle << "\n";
     std::filesystem::remove(zipFile);
+    return;
   }
 
-  void Updater::UpdateServer()
+  // unzip Carbon/Oxide release into server installation directory
+  // NOTE: both plugin frameworks currently release .zip files that are intended
+  //  to be extracted directly into the server installation root
+  zip_t* zipPtr(zip_open(zipFile.string().c_str(), 0, 'r'));
+  if (!zipPtr)
   {
-    // abort if any required path is empty, meaning it failed validation
-    if (serverInstallPath_.empty() || steamCmdPath_.empty())
-    {
-      std::cout << "ERROR: Cannot update server because install and/or steamcmd path is invalid\n";
-      return;
-    }
+    std::cout << "ERROR: Failed to open " << frameworkTitle << " zip\n";
+    std::filesystem::remove(zipFile);
+    return;
+  }
+  const ssize_t zipEntries(zip_entries_total(zipPtr));
+  zip_close(zipPtr);
+  if (zipEntries <= 0)
+  {
+    std::cout << "ERROR: Failed to get valid file count from " << frameworkTitle << " zip: " << zip_strerror(static_cast<int>(zipEntries)) << "\n";
+    std::filesystem::remove(zipFile);
+    return;
+  }
 
-    std::vector<std::string> args {
-      "+force_install_dir", serverInstallPath_,
-      "+login", "anonymous",
-      "+app_update", "258550"
-    };
-    const std::string& betaKey(GetInstalledServerBranch());
-    if (!betaKey.empty())
-    {
-      args.emplace_back("-beta");
-      args.push_back(betaKey);
-    }
-    args.emplace_back("validate");
-    args.emplace_back("+quit");
-    // std::cout << "Invoking SteamCMD with args:";
-    // for (const auto& a : args)
-    // {
-    //   std::cout << " " << a;
-    // }
-    // std::cout<< "\n";
-    std::error_code errorCode;
-    const int exitCode(boost::process::system(
-      boost::process::exe(steamCmdPath_),
-      boost::process::args(args),
-      boost::process::error(errorCode)
+  ZipStatus zipStatus{0, zipEntries};
+  if
+  (
+    const int extractResult(zip_extract(
+      zipFile.string().c_str(), serverInstallPath_.string().c_str(),
+      ZipExtractCallback, &zipStatus
     ));
-    if (errorCode)
-    {
-      std::cout << "WARNING: Error running server update command: " << errorCode.message()<< "\n";
-      return;
-    }
-    if (exitCode)
-    {
-      std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode<< "\n";
-      return;
-    }
-    // std::cout << "Server update successful\n";
+    extractResult
+  )
+  {
+    std::cout << "ERROR: Failed to extract " << frameworkTitle << " zip: " << zip_strerror(extractResult)<< "\n";
+  }
+  else
+  {
+    // std::cout << frameworkTitle << " update successful\n";
   }
 
-  std::string Updater::GetAppManifestValue(
-    const std::string& appManifestPath, const std::string& keyPath,
-    const bool warn)
-  {
-    std::string retVal;
+  // remove the zip either way
+  std::filesystem::remove(zipFile);
+}
 
-    try
-    {
-      boost::property_tree::ptree tree;
-      boost::property_tree::read_info(appManifestPath, tree);
-      retVal = tree.get<std::string>(keyPath);
-    }
-    catch (const boost::property_tree::ptree_bad_path& ex)
-    {
-      if (warn)
-      {
-        std::cout << "WARNING: Exception parsing server app manifest: " << ex.what()<< "\n";
-      }
-      retVal.clear();
-    }
-    catch (const std::exception& ex)
+void Updater::UpdateServer() const
+{
+  // abort if any required path is empty, meaning it failed validation
+  if (serverInstallPath_.empty() || steamCmdPath_.empty())
+  {
+    std::cout << "ERROR: Cannot update server because install and/or steamcmd path is invalid\n";
+    return;
+  }
+
+  std::vector<std::string> args
+  {
+    "+force_install_dir", serverInstallPath_.string(),
+    "+login", "anonymous",
+    "+app_update", "258550"
+  };
+  if
+  (
+    std::string betaKey(GetInstalledServerBranch());
+    !betaKey.empty()
+  )
+  {
+    args.emplace_back("-beta");
+    args.emplace_back(std::move(betaKey));
+  }
+  args.emplace_back("validate");
+  args.emplace_back("+quit");
+  // std::cout << "Invoking SteamCMD with args:";
+  // for (const auto& a : args)
+  // {
+  //   std::cout << " " << a;
+  // }
+  // std::cout<< "\n";
+  std::error_code errorCode;
+  const int exitCode(boost::process::system(
+    boost::process::exe(steamCmdPath_.string()),
+    boost::process::args(args),
+    boost::process::error(errorCode)
+  ));
+  if (errorCode)
+  {
+    std::cout << "WARNING: Error running server update command: " << errorCode.message()<< "\n";
+    return;
+  }
+  if (exitCode)
+  {
+    std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode<< "\n";
+    return;
+  }
+  // std::cout << "Server update successful\n";
+}
+
+std::string Updater::GetAppManifestValue(
+  const std::filesystem::path& appManifestPath,
+  const std::string_view keyPath,
+  const bool warn)
+{
+  std::string retVal{};
+
+  try
+  {
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_info(appManifestPath.string(), tree);
+    retVal = tree.get<std::string>(keyPath.data());
+  }
+  catch (const boost::property_tree::ptree_bad_path& ex)
+  {
+    if (warn)
     {
       std::cout << "WARNING: Exception parsing server app manifest: " << ex.what()<< "\n";
-      retVal.clear();
     }
+    retVal.clear();
+  }
+  catch (const std::exception& ex)
+  {
+    std::cout << "WARNING: Exception parsing server app manifest: " << ex.what()<< "\n";
+    retVal.clear();
+  }
+  catch (...)
+  {
+    std::cout << "WARNING: Unknown exception parsing server app manifest\n";
+    retVal.clear();
+  }
 
-    // std::cout << "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "\n";
+  // std::cout << "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "\n";
 
+  return retVal;
+}
+
+std::string Updater::GetInstalledFrameworkVersion() const
+{
+  std::string retVal;
+  if (frameworkDllPath_.empty()) { return retVal; }
+  // run powershell and grab all output into inStream
+  boost::process::ipstream inStream;
+  // for some reason boost requires explicitly requesting a PATH search unless
+  //  we want to pass the entire command as a single string
+  const auto psPath(boost::process::search_path("powershell.exe"));
+  if (psPath.empty())
+  {
+    std::cout << "ERROR: Failed to find powershell\n";
     return retVal;
   }
-
-  std::string Updater::GetInstalledOxideVersion() const
+  std::error_code errorCode;
+  const int exitCode(boost::process::system(
+    boost::process::exe(psPath),
+    boost::process::args({
+      "-Command",
+      std::string("(Get-Item '") + frameworkDllPath_.string() + "').VersionInfo.ProductVersion"
+    }),
+    boost::process::std_out > inStream,
+    boost::process::error(errorCode)
+  ));
+  if (errorCode)
   {
-    std::string retVal;
-    if (oxideDllPath_.empty()) { return retVal; }
-    // run powershell and grab all output into inStream
-    boost::process::ipstream inStream;
-    // for some reason boost requires explicitly requesting a PATH search unless
-    //  we want to pass the entire command as a single string
-    const auto psPath(boost::process::search_path("powershell.exe"));
-    if (psPath.empty())
-    {
-      std::cout << "ERROR: Failed to find powershell\n";
-      return retVal;
-    }
-    std::error_code errorCode;
-    const int exitCode(boost::process::system(
-      boost::process::exe(psPath),
-      boost::process::args({
-        "-Command",
-        std::string("(Get-Item '") + oxideDllPath_ + "').VersionInfo.ProductVersion"
-      }),
-      boost::process::std_out > inStream,
-      boost::process::error(errorCode)
-    ));
-    if (errorCode)
-    {
-      std::cout << "ERROR: Error running Oxide version check command: " << errorCode.message()<< "\n";
-      return retVal;
-    }
-    if (exitCode)
-    {
-      std::cout << "ERROR: Powershell returned nonzero exit code: " << exitCode<< "\n";
-      return retVal;
-    }
-    // grab first line of output stream into retVal string
-    std::getline(inStream, retVal);
-    // for some reason this has a newline at the end, so strip that off
-    while (retVal.back() == '\r' || retVal.back() == '\n') { retVal.pop_back(); }
-    // strip off anything starting with `+` if present
-    return retVal.substr(0, retVal.find('+'));
+    std::cout << "ERROR: Error running " << ToString(frameworkUpdateCheck_, ToStringCase::TITLE) << " version check command: " << errorCode.message() << "\n";
+    return retVal;
   }
-
-  std::string Updater::GetInstalledServerBranch() const
+  if (exitCode)
   {
-    return GetAppManifestValue(appManifestPath_, "AppState.UserConfig.BetaKey", false);
+    std::cout << "ERROR: Powershell returned nonzero exit code: " << exitCode << "\n";
+    return retVal;
   }
+  // grab first line of output stream into retVal string
+  std::getline(inStream, retVal);
+  // for some reason this has a newline at the end, so strip that off
+  while (retVal.back() == '\r' || retVal.back() == '\n') { retVal.pop_back(); }
+  // strip off anything starting with `+` or `-` if present
+  return retVal.substr(0, retVal.find_first_of("+-"));
+}
 
-  std::string Updater::GetInstalledServerBuild() const
+std::string Updater::GetInstalledServerBranch() const
+{
+  return GetAppManifestValue(appManifestPath_, "AppState.UserConfig.BetaKey", false);
+}
+
+std::string Updater::GetInstalledServerBuild() const
+{
+  return GetAppManifestValue(appManifestPath_, "AppState.buildid");
+}
+
+std::string Updater::GetLatestServerBuild(const std::string_view branch) const
+{
+  std::string retVal;
+  // abort if any required path is empty, meaning it failed validation
+  if (serverInstallPath_.empty() || steamCmdPath_.empty())
   {
-    return GetAppManifestValue(appManifestPath_, "AppState.buildid");
+    std::cout << "ERROR: Cannot check for server updates because install and/or steamcmd path is invalid\n";
+    return retVal;
   }
-
-  std::string Updater::GetLatestServerBuild(const std::string& branch) const
+  // write a script for steamcmd to run
+  // this is needed because steamcmd acts very buggy when I try to use other
+  //  methods
+  // TODO: this should go in RLS' data directory, not the server's
+  const std::filesystem::path scriptFilePath
   {
-    std::string retVal;
-    // abort if any required path is empty, meaning it failed validation
-    if (serverInstallPath_.empty() || steamCmdPath_.empty())
+    serverInstallPath_ / "steamcmd.scr"
+  };
+  std::ofstream scriptFile(scriptFilePath, std::ios::trunc);
+  if (!scriptFile.is_open())
+  {
+    std::cout << "ERROR: Failed to open steamcmd script file `" << scriptFilePath << "`\n";
+    return retVal;
+  }
+  scriptFile
+    << "force_install_dir " << serverInstallPath_ << "\n"
+    << "login anonymous\n"
+    << "app_info_update 1\n"
+    << "app_info_print 258550\n"
+    << "quit\n"
+  ;
+  scriptFile.close();
+  // launch steamcmd and extract desired info
+  boost::process::ipstream fromChild; // from child to RLS
+  std::error_code errorCode;
+  boost::process::child sc(
+    boost::process::exe(steamCmdPath_.string()),
+    boost::process::args({"+runscript", scriptFilePath.string()}),
+    boost::process::std_out > fromChild,
+    boost::process::error(errorCode)
+  );
+  // this will hold the extracted info blob as a string
+  std::string steamInfo;
+  // this will hold the most recently read line of output from steamcmd
+  std::string line;
+  // track info blob extraction status
+  SteamCmdReadState readState(SteamCmdReadState::FIND_INFO_START);
+  // now process output from steamcmd one line at a time
+  // NOTE: Boost.Process docs say not to read from steam unless app is
+  //  running, but this truncates the output so F that - we do what works!
+  while (/*sc.running() &&*/ std::getline(fromChild, line))
+  {
+    bool appendLine(false);
+    if (line.empty()) continue;
+    switch (readState)
     {
-      std::cout << "ERROR: Cannot check for server updates because install and/or steamcmd path is invalid\n";
-      return retVal;
-    }
-    // write a script for steamcmd to run
-    // this is needed because steamcmd acts very buggy when I try to use other
-    //  methods
-    // TODO: this should go in RLS' data directory, not the server's
-    const std::string scriptFilePath(serverInstallPath_ + "\\steamcmd.scr");
-    std::ofstream scriptFile(scriptFilePath, std::ios::trunc);
-    if (!scriptFile.is_open())
-    {
-      std::cout << "ERROR: Failed to open steamcmd script file `" << scriptFilePath << "`\n";
-      return retVal;
-    }
-    scriptFile
-      << "force_install_dir " << serverInstallPath_ << "\n"
-      << "login anonymous\n"
-      << "app_info_update 1\n"
-      << "app_info_print 258550\n"
-      << "quit\n"
-    ;
-    scriptFile.close();
-    // launch steamcmd and extract desired info
-    boost::process::ipstream fromChild; // from child to RLS
-    std::error_code errorCode;
-    boost::process::child sc(
-      boost::process::exe(steamCmdPath_),
-      boost::process::args({"+runscript", scriptFilePath}),
-      boost::process::std_out > fromChild,
-      boost::process::error(errorCode)
-    );
-    // this will hold the extracted info blob as a string
-    std::string steamInfo;
-    // this will hold the most recently read line of output from steamcmd
-    std::string line;
-    // track info blob extraction status
-    SteamCmdReadState readState(SteamCmdReadState::FIND_INFO_START);
-    // now process output from steamcmd one line at a time
-    // NOTE: Boost.Process docs say not to read from steam unless app is
-    //  running, but this truncates the output so F that - we do what works!
-    while (/*sc.running() &&*/ std::getline(fromChild, line))
-    {
-      bool appendLine(false);
-      if (line.empty()) continue;
-      switch (readState)
+      case SteamCmdReadState::FIND_INFO_START:
       {
-        case SteamCmdReadState::FIND_INFO_START:
+        // looking for "258550" (in double quotes, at start of line)
+        if (!line.empty() && line[0] == '\"' && line.find("\"258550\"") == 0)
         {
-          // looking for "258550" (in double quotes, at start of line)
-          if (!line.empty() && line[0] == '\"' && line.find("\"258550\"") == 0)
-          {
-            appendLine = true;
-            readState = SteamCmdReadState::FIND_INFO_END;
-          }
-          break;
-        }
-        case SteamCmdReadState::FIND_INFO_END:
-        {
-          // append all lines in this mode
           appendLine = true;
-          // looking for "}" as the first character to signal info blob end
-          if (!line.empty() && line[0] == '}')
-          {
-            readState = SteamCmdReadState::COMPLETE;
-          }
-          break;
+          readState = SteamCmdReadState::FIND_INFO_END;
         }
-        case SteamCmdReadState::COMPLETE:
-        {
-          appendLine = false;
-          break;
-        }
+        break;
       }
-      if (appendLine)
+      case SteamCmdReadState::FIND_INFO_END:
       {
-        steamInfo.append(line).append("\n");
+        // append all lines in this mode
+        appendLine = true;
+        // looking for "}" as the first character to signal info blob end
+        if (!line.empty() && line[0] == '}')
+        {
+          readState = SteamCmdReadState::COMPLETE;
+        }
+        break;
+      }
+      case SteamCmdReadState::COMPLETE:
+      {
+        appendLine = false;
+        break;
       }
     }
-    sc.wait(errorCode);
-    // report any process errors
-    if (errorCode)
+    if (appendLine)
     {
-      std::cout << "WARNING: Error running server update command: " << errorCode.message()<< "\n";
+      steamInfo.append(line).append("\n");
     }
-    const int exitCode(sc.exit_code());
-    if (exitCode)
-    {
-      std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode<< "\n";
-    }
-    // audit output
-    if (readState != SteamCmdReadState::COMPLETE)
-    {
-      std::cout << "ERROR: SteamCMD output did not include a valid app info tree\n";
-      return retVal;
-    }
-    // process output
-    std::stringstream ss(steamInfo);
-    try
-    {
-      boost::property_tree::ptree tree;
-      boost::property_tree::read_info(ss, tree);
-      retVal = tree.get<std::string>(
-        std::string("258550.depots.branches.") +
-        (branch.empty() ? "public" : branch) +
-        ".buildid"
-      );
-    }
-    catch (const std::exception& ex)
-    {
-      std::cout << "ERROR: Exception parsing SteamCMD output: " << ex.what()<< "\n";
-      retVal.clear();
-    }
+  }
+  sc.wait(errorCode);
+  // report any process errors
+  if (errorCode)
+  {
+    std::cout << "WARNING: Error running server update command: " << errorCode.message()<< "\n";
+  }
+  if (const int exitCode(sc.exit_code()); exitCode)
+  {
+    std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode << "\n";
+  }
+  // audit output
+  if (readState != SteamCmdReadState::COMPLETE)
+  {
+    std::cout << "ERROR: SteamCMD output did not include a valid app info tree\n";
     return retVal;
   }
-
-  std::string Updater::GetLatestOxideURL() const
+  // process output
+  std::stringstream ss(steamInfo);
+  try
   {
-    if (!downloaderUptr_)
-    {
-      std::cout << "ERROR: Downloader handle is null\n";
-      return {};
-    }
-    const std::string& oxideInfo(
-      downloaderUptr_->GetUrlToString("https://api.github.com/repos/OxideMod/Oxide.Rust/releases/latest")
-    );
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_info(ss, tree);
+    retVal = tree.get<std::string>(
+      std::string{"258550.depots.branches."} +
+      (branch.empty() ? "public" : branch.data()) +
+      ".buildid"
+  );
+  }
+  catch (const std::exception& ex)
+  {
+    std::cout << "ERROR: Exception parsing SteamCMD output: " << ex.what()<< "\n";
+    retVal.clear();
+  }
+  catch (...)
+  {
+    std::cout << "ERROR: Unknown exception parsing SteamCMD output\n";
+    retVal.clear();
+  }
+  return retVal;
+}
 
-    try
+std::string Updater::GetLatestFrameworkURL() const
+{
+  if (!downloaderSptr_)
+  {
+    std::cout << "ERROR: Downloader handle is null\n";
+    return {};
+  }
+  const std::string_view frameworkURL{GetFrameworkURL(frameworkUpdateCheck_)};
+  const std::string_view frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
+  const std::string_view frameworkAsset{GetFrameworkAsset(frameworkUpdateCheck_)};
+  const std::string_view frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
+
+  try
+  {
+    const auto& j(nlohmann::json::parse(frameworkInfo));
+    // "assets" node is a list of release files
+    // there's usually a Linux release that we want to ignore for now
+    // TODO: choose the linux version when appropriate if RLS ever gets
+    //  ported to that OS
+    for (const auto& asset : j["assets"])
     {
-      const auto& j(nlohmann::json::parse(oxideInfo));
-      // "assets" node is a list of release files
-      // there's usually a Linux release that we want to ignore for now
-      // TODO: choose the linux version when appropriate if RLS ever gets
-      //  ported to that OS
-      for (const auto& asset : j["assets"])
+      if (asset["name"] == frameworkAsset)
       {
-        if (asset["name"] == "Oxide.Rust.zip")
-        {
-          return asset["browser_download_url"];
-        }
+        return asset["browser_download_url"];
       }
     }
-    catch (const nlohmann::json::exception& e)
-    {
-      std::cout << "ERROR: Exception extracting download URL from Oxide releases JSON: " << e.what() << "\n";
-      std::cout << "Input string: '" << oxideInfo << "'\n";
-      return {};
-    }
-
-    std::cout << "ERROR: Failed to extract download URL from Oxide releases JSON\n";
-    return {};
   }
-
-  std::string Updater::GetLatestOxideVersion() const
+  catch (const nlohmann::json::exception& e)
   {
-    if (!downloaderUptr_)
-    {
-      std::cout << "ERROR: Downloader handle is null\n";
-      return {};
-    }
-    const std::string& oxideInfo(
-      downloaderUptr_->GetUrlToString("https://api.github.com/repos/OxideMod/Oxide.Rust/releases/latest")
-    );
-
-    try
-    {
-      const auto& j(nlohmann::json::parse(oxideInfo));
-      return j["name"];
-    }
-    catch(const nlohmann::json::exception& e)
-    {
-      std::cout << "ERROR: Exception extracting version name from Oxide releases JSON: " << e.what() << "\n";
-      std::cout << "Input string: '" << oxideInfo << "'\n";
-      return {};
-    }
-
-    std::cout << "ERROR: Failed to extract version name from Oxide releases JSON\n";
+    std::cout << "ERROR: Exception extracting download URL from " << frameworkTitle << " releases JSON: " << e.what() << "\n";
+    std::cout << "Input string: '" << frameworkInfo << "'\n";
     return {};
   }
+
+  std::cout << "ERROR: Failed to extract download URL from " << frameworkTitle << " releases JSON\n";
+  return {};
+}
+
+std::string Updater::GetLatestFrameworkVersion() const
+{
+  if (!downloaderSptr_)
+  {
+    std::cout << "ERROR: Downloader handle is null\n";
+    return {};
+  }
+  const std::string_view frameworkURL{GetFrameworkURL(frameworkUpdateCheck_)};
+  const std::string_view frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
+  const std::string_view frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
+
+  try
+  {
+    const auto& j(nlohmann::json::parse(frameworkInfo));
+    switch (frameworkUpdateCheck_)
+    {
+      case PluginFramework::NONE: break;
+      // need to process the Carbon release name
+      case PluginFramework::CARBON:
+      {
+        // Carbon release versions look like "Production Build — v1.2024.1033.4309"
+        // ...but we only want the part after the 'v', so strip the rest off
+        static const std::string_view CARBON_PREFIX{"Production Build — v"};
+        const std::string& carbonVersion{j["name"]};
+        // bail if the version string doesn't start with the prefix string, as it
+        //  means release naming has changed
+        if (carbonVersion.find(CARBON_PREFIX) != 0)
+        {
+          std::cout << "ERROR: Carbon release prefix not found in version string: " << carbonVersion << "\n";
+          return {};
+        }
+        // return everything *after* the prefix string
+        return carbonVersion.substr(CARBON_PREFIX.length());
+      }
+      // just return the raw release name for Oxide
+      case PluginFramework::OXIDE: return j["name"];
+    }
+    std::cout << "ERROR: Unsupported plugin framework\n";
+    return {};
+  }
+  catch(const nlohmann::json::exception& e)
+  {
+    std::cout << "ERROR: JSON exception while extracting version name from " << frameworkTitle << " release data: " << e.what() << "\n";
+    std::cout << "Input data:\n" << frameworkInfo << "\n";
+    return {};
+  }
+  catch (const std::exception& e)
+  {
+    std::cout << "ERROR: General exception while extracting version name from " << frameworkTitle << " release data: " << e.what() << "\n";
+    std::cout << "Input data:\n" << frameworkInfo << "\n";
+    return {};
+  }
+  catch (...)
+  {
+    std::cout << "ERROR: Unknown exception when attempting to get latest plugin framework release version\n";
+    std::cout << "Input data:\n" << frameworkInfo << "\n";
+    return {};
+  }
+
+  std::cout << "ERROR: Unknown failure when attempting to get latest plugin framework release version\n";
+  std::cout << "Input data:\n" << frameworkInfo << "\n";
+  return {};
+}
 }

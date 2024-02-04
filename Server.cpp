@@ -8,7 +8,6 @@
 #include <boost/process/extend.hpp>
 #include <boost/process/windows.hpp>
 #include <chrono>
-#include <filesystem>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -58,14 +57,14 @@ struct ProcessImpl
   std::unique_ptr<boost::process::child> processUptr_;
 };
 
-Server::Server(const Config& cfg)
+Server::Server(std::shared_ptr<const Config> cfgSptr)
   : rconUptr_(std::make_unique<Rcon>(
-      cfg.GetRconIP(), cfg.GetRconPort(), cfg.GetRconPassword(),
-      cfg.GetRconLog()
+      cfgSptr->GetRconIP(), cfgSptr->GetRconPort(), cfgSptr->GetRconPassword(),
+      cfgSptr->GetRconLog()
     ))
-  , rustDedicatedPath_(cfg.GetInstallPath() + "RustDedicated.exe")
-  , stopDelaySeconds_(cfg.GetProcessShutdownDelaySeconds())
-  , workingDirectory_(cfg.GetInstallPath())
+  , rustDedicatedPath_(cfgSptr->GetInstallPath() / "RustDedicated.exe")
+  , stopDelaySeconds_(cfgSptr->GetProcessShutdownDelaySeconds())
+  , workingDirectory_(cfgSptr->GetInstallPath())
 {
   // do this here, or else Sonar badgers me to use in-class initializers, which
   //  won't work with opaque types
@@ -74,27 +73,27 @@ Server::Server(const Config& cfg)
   if (!std::filesystem::exists(workingDirectory_))
   {
     throw std::invalid_argument(
-      std::string("Server install path does not exist: ") + workingDirectory_);
+      std::string("Server install path does not exist: ") + workingDirectory_.string());
   }
   if (!std::filesystem::exists(rustDedicatedPath_))
   {
     throw std::invalid_argument(
-      std::string("Server launch binary does not exist: ") + rustDedicatedPath_);
+      std::string("Server launch binary does not exist: ") + rustDedicatedPath_.string());
   }
   if (
-    const std::string serverIdentityPath(
-      workingDirectory_ + "server\\" + cfg.GetInstallIdentity()
+    const std::filesystem::path serverIdentityPath(
+      workingDirectory_ / "server" / cfgSptr->GetInstallIdentity()
     );
     !std::filesystem::exists(serverIdentityPath)
   )
   {
     throw std::invalid_argument(
-      std::string("Server identity path does not exist: ") + serverIdentityPath);
+      std::string("Server identity path does not exist: ") + serverIdentityPath.string());
   }
   // set up server launch arguments
   // start with parameters directly defined in config
   //  "minus" parameters
-  for (const auto& [mParamName, mParamData] : cfg.GetMinusParams())
+  for (const auto& [mParamName, mParamData] : cfgSptr->GetMinusParams())
   {
     const bool isBool(mParamData.boolValue_);
     // if this a boolean set to false, skip it
@@ -107,7 +106,7 @@ Server::Server(const Config& cfg)
     rustDedicatedArguments_.push_back(QuoteString(mParamData.ToString()));
   }
   //  "plus" parameters
-  for (const auto& [pParamName, pParamData] : cfg.GetPlusParams())
+  for (const auto& [pParamName, pParamData] : cfgSptr->GetPlusParams())
   {
     const bool isBool(pParamData.boolValue_);
     // if this a boolean set to false, skip it
@@ -116,8 +115,8 @@ Server::Server(const Config& cfg)
     //  rustLaunchSite configuration
     if (
       pParamName == "+rcon.password" ||
-      (pParamName == "+rcon.ip" && cfg.GetRconPassthroughIP()) ||
-      (pParamName == "+rcon.port" && cfg.GetRconPassthroughPort()) ||
+      (pParamName == "+rcon.ip" && cfgSptr->GetRconPassthroughIP()) ||
+      (pParamName == "+rcon.port" && cfgSptr->GetRconPassthroughPort()) ||
       pParamName == "+rcon.web" ||
       pParamName == "+server.identity" ||
       pParamName == "+server.seed"
@@ -135,37 +134,37 @@ Server::Server(const Config& cfg)
   }
   // now set automatically-determined parameters
   rustDedicatedArguments_.emplace_back("+rcon.password");
-  rustDedicatedArguments_.push_back(QuoteString(cfg.GetRconPassword()));
-  if (cfg.GetRconPassthroughIP())
+  rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetRconPassword()));
+  if (cfgSptr->GetRconPassthroughIP())
   {
     rustDedicatedArguments_.emplace_back("+rcon.ip");
-    rustDedicatedArguments_.push_back(QuoteString(cfg.GetRconIP()));
+    rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetRconIP()));
   }
-  if (cfg.GetRconPassthroughPort())
+  if (cfgSptr->GetRconPassthroughPort())
   {
     rustDedicatedArguments_.emplace_back("+rcon.port");
     std::stringstream s;
-    s << cfg.GetRconPort();
+    s << cfgSptr->GetRconPort();
     rustDedicatedArguments_.push_back(QuoteString(s.str()));
   }
   rustDedicatedArguments_.emplace_back("+rcon.web");
   rustDedicatedArguments_.emplace_back("1");
   rustDedicatedArguments_.emplace_back("+server.identity");
-  rustDedicatedArguments_.push_back(QuoteString(cfg.GetInstallIdentity()));
+  rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetInstallIdentity()));
   // seed is a bit complicated
   // TODO: ...and this isn't even the final logic needed!
   rustDedicatedArguments_.emplace_back("+server.seed");
   int seed(1);
-  switch (cfg.GetSeedStrategy())
+  switch (cfgSptr->GetSeedStrategy())
   {
     case Config::SeedStrategy::FIXED:
     {
-      seed = cfg.GetSeedFixed();
+      seed = cfgSptr->GetSeedFixed();
     }
     break;
     case Config::SeedStrategy::LIST:
     {
-      seed = cfg.GetSeedList().at(0);
+      seed = cfgSptr->GetSeedList().at(0);
     }
     break;
     case Config::SeedStrategy::RANDOM:
@@ -349,9 +348,9 @@ bool Server::Start()
   {
 */
   processImplUptr_->processUptr_ = std::make_unique<boost::process::child>(
-    boost::process::exe(rustDedicatedPath_),
+    boost::process::exe(rustDedicatedPath_.string()),
     boost::process::args(rustDedicatedArguments_),
-    boost::process::start_dir(workingDirectory_),
+    boost::process::start_dir(workingDirectory_.string()),
     // I/O redirect options and effects:
     // - do nothing: server takes over our console and garbles it up
     // - close any/all: server spams its logs with exceptions
@@ -451,7 +450,7 @@ void Server::Stop(const std::string& reason)
   processImplUptr_->processUptr_.reset();
 }
 
-void Server::StopDelay(const std::string& reason)
+void Server::StopDelay(std::string_view reason)
 {
   if (!stopDelaySeconds_)
   {

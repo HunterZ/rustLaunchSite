@@ -94,7 +94,8 @@ Config::Config(const std::string& configFile)
   catch (const libconfig::FileIOException& e)
   {
     throw std::invalid_argument(
-      std::string("Unable to read config file: ") + configFile
+      std::string("Exception reading config file '") + configFile + "': "
+      + e.what()
     );
   }
   catch (const libconfig::ParseException& e)
@@ -118,21 +119,11 @@ Config::Config(const std::string& configFile)
 
     // install
     installPath_ = cfg.lookup("rustLaunchSite.install.path").c_str();
-    if (!installPath_.empty() && installPath_.back() != '\\')
-    {
-      std::cout << "WARNING: Configured install path is missing a trailing slash" << std::endl;
-      installPath_ += '\\';
-    }
     installIdentity_ = cfg.lookup("rustLaunchSite.install.identity").c_str();
 
     // paths
     pathsCache_ = cfg.lookup("rustLaunchSite.paths.cache").c_str();
     pathsDownload_ = cfg.lookup("rustLaunchSite.paths.download").c_str();
-    if (!pathsDownload_.empty() && pathsDownload_.back() != '\\')
-    {
-      std::cout << "WARNING: Configured download path is missing a trailing slash" << std::endl;
-      pathsDownload_ += '\\';
-    }
 
     // process
     processAutoRestart_ = (
@@ -224,15 +215,32 @@ Config::Config(const std::string& configFile)
       cfg.exists("rustLaunchSite.update.server")
       && cfg.lookup("rustLaunchSite.update.server")
     );
-    updateOxide_ = (
-      cfg.exists("rustLaunchSite.update.oxide")
-      && cfg.lookup("rustLaunchSite.update.oxide")
-    );
+    updateModFramework_ = ModFramework::NONE;
+    if (cfg.exists("rustLaunchSite.update.modFramework"))
+    {
+      const std::string& updateModFramework(cfg.lookup("rustLaunchSite.update.modFramework"));
+      if (updateModFramework == "carbon")
+      {
+        updateModFramework_ = ModFramework::CARBON;
+      }
+      else if (updateModFramework == "oxide")
+      {
+        updateModFramework_ = ModFramework::OXIDE;
+      }
+      else
+      {
+        std::cout << "WARNING: Ignoring unsupported modFramework value: '" << updateModFramework << "'" << std::endl;
+      }
+    }
     updateIntervalMinutes_ = 0;
     if (cfg.exists("rustLaunchSite.update.intervalMinutes"))
     {
       updateIntervalMinutes_ = cfg.lookup("rustLaunchSite.update.intervalMinutes");
-      if (updateIntervalMinutes_ < 0) { updateIntervalMinutes_ = 0; }
+      if (updateIntervalMinutes_ < 0)
+      {
+        std::cout << "WARNING: Ignoring negative intervalMinutes value: '" << updateIntervalMinutes_ << "'" << std::endl;
+        updateIntervalMinutes_ = 0;
+      }
     }
 
     // wipe

@@ -94,14 +94,8 @@ Rcon::Rcon(
   const bool logMessages
 )
   : logMessages_(logMessages)
+  , webSocketUptr_(std::make_unique<WebSocket>())
 {
-  // do this here, because otherwise Sonar badgers me to use in-class
-  //  initializers, which isn't possible with opaque types
-  webSocketUptr_ = std::make_unique<WebSocket>();
-  if (!webSocketUptr_)
-  {
-    throw std::runtime_error("Failed to create underlying WebSocket handle");
-  }
   auto& webSocket(**webSocketUptr_);
   // Rust doesn't support secure WebSocket connections, so form insecure URL
   std::stringstream s;

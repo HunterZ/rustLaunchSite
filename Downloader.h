@@ -1,8 +1,10 @@
 #ifndef DOWNLOADER_H
 #define DOWNLOADER_H
 
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace rustLaunchSite
 {
@@ -29,14 +31,17 @@ namespace rustLaunchSite
       /// @brief Download specified URL contents to a string
       /// @param url URL whose contents should be downloaded
       /// @return Contents retrieved from URL, or empty string on failure
-      std::string GetUrlToString(const std::string& url) const;
+      std::string GetUrlToString(const std::string_view url) const;
 
       /// @brief Download specified URL contents to a file
       /// @details The file will be truncated prior to download attempt.
       /// @param file File to which URL contents should be saved
       /// @param url URL whose contents should be downloaded
       /// @return @c true on success, @c false on failure
-      bool GetUrlToFile(const std::string& file, const std::string& url);
+      bool GetUrlToFile(
+        const std::filesystem::path& file,
+        const std::string_view url
+      ) const;
 
     private:
 
@@ -45,10 +50,9 @@ namespace rustLaunchSite
       Downloader(const Downloader&) = delete;
       Downloader& operator= (const Downloader&) = delete;
 
-      static std::shared_ptr<rustLaunchSite::DownloaderInitHandle> GetDownloaderInitHandle();
-
-      // handle to manage global (de)init of underlying functionality
-      std::shared_ptr<DownloaderInitHandle> downloaderInitHandleSptr_ = GetDownloaderInitHandle();
+      using InitHandle = std::shared_ptr<std::size_t>;
+      static InitHandle GetInitHandle();
+      InitHandle initHandle_{GetInitHandle()};
   };
 }
 

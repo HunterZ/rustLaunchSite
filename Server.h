@@ -1,8 +1,10 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rustLaunchSite
@@ -20,12 +22,12 @@ class Server
 public:
 
   /// @brief Primary constructor
-  /// @param cfg Reference to application configuration
+  /// @param cfgSptr Shared pointer to application configuration
   /// @details Starts RCON service immediately.
   /// @throw @c std::invalid_argument if dedicated server binary or install
   ///  path are not found, or @c std::runtime_error if RCON facility
   ///  creation failed
-  explicit Server(const Config& cfg);
+  explicit Server(std::shared_ptr<const Config> cfgSptr);
 
   /// @brief Destructor
   /// @details For some reason this needs to be explicitly declared in order
@@ -98,7 +100,7 @@ private:
   // perform stop delay processing
   // if a stop delay is configured, loop until it has elapsed, or until all
   //  players have disconnected (whichever occurs first)
-  void StopDelay(const std::string& reason = {});
+  void StopDelay(std::string_view reason = {});
 
   // unique pointer to low-level server process management interface
   // this is a pointer to an opaque type to avoid leaking a dependency on
@@ -112,12 +114,12 @@ private:
   //  server binary on launch
   std::vector<std::string> rustDedicatedArguments_;
   // path to Rust dedicated server binary
-  std::string rustDedicatedPath_;
+  std::filesystem::path rustDedicatedPath_;
   // number of seconds to delay server shutdown when users logged on
   // zero means don't wait even if users are logged on
   std::size_t stopDelaySeconds_;
   // path that should be used as working directory when launching server
-  std::string workingDirectory_;
+  std::filesystem::path workingDirectory_;
 };
 }
 

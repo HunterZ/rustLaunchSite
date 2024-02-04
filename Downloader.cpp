@@ -20,19 +20,10 @@
 
 namespace
 {
-  // maintain weak pointer to init handle
-  // only Downloader instances will hold shared pointers to it, but this is
-  //  needed to ensure they all get a shared pointer to the same handle instance
-  std::weak_ptr<rustLaunchSite::DownloaderInitHandle>
-    DOWNLOADER_INIT_HANDLE_WPTR;
-  // use a mutex in case two Downloader instances get created at the same time
-  //  in different threads
-  std::mutex DOWNLOADER_INIT_HANDLE_MUTEX;
-
   // Curl requires a C-style callback handler, so this function accumulates
   //  downloaded data into a file
   std::size_t WriteToFile(
-    char* dataPtr, std::size_t size, std::size_t nmemb, std::ofstream* filePtr
+    char const* dataPtr, std::size_t size, std::size_t nmemb, std::ofstream* filePtr
   )
   {
     if (!dataPtr || !filePtr)
@@ -49,7 +40,7 @@ namespace
   // Curl requires a C-style callback handler, so this function accumulates
   //  downloaded data into a string
   std::size_t WriteToString(
-    char* dataPtr, std::size_t size, std::size_t nmemb, std::string* stringPtr
+    char const* dataPtr, std::size_t size, std::size_t nmemb, std::string* stringPtr
   )
   {
     if (!dataPtr || !stringPtr)
@@ -65,28 +56,9 @@ namespace
 
 namespace rustLaunchSite
 {
-  // RAII wrapper for underlying init API
-  struct DownloaderInitHandle
-  {
-    DownloaderInitHandle()
-    {
-      curl_global_init(CURL_GLOBAL_ALL);
-      std::cout << "Initialized Downloader library\n";
-    }
-    ~DownloaderInitHandle()
-    {
-      curl_global_cleanup();
-      std::cout << "Uninitialized Downloader library\n";
-    }
-  };
-  // end of init stuff
+  Downloader::Downloader() = default;
 
-  Downloader::Downloader()
-    // : downloaderInitHandleSptr_(GetDownloaderInitHandle())
-  {
-  }
-
-  std::string Downloader::GetUrlToString(const std::string& url) const
+  std::string Downloader::GetUrlToString(const std::string_view url) const
   {
     std::string retVal;
     auto* curlPtr(curl_easy_init());
@@ -97,7 +69,7 @@ namespace rustLaunchSite
     }
     CURLcode curlCode(CURLE_OK);
     curlCode = curlCode == CURLE_OK ?
-      curl_easy_setopt(curlPtr, CURLOPT_URL, url.c_str()) : curlCode;
+      curl_easy_setopt(curlPtr, CURLOPT_URL, url.data()) : curlCode;
     curlCode = curlCode == CURLE_OK ?
       curl_easy_setopt(curlPtr, CURLOPT_FOLLOWLOCATION, 1L) : curlCode;
     curlCode = curlCode == CURLE_OK ?
@@ -117,7 +89,10 @@ namespace rustLaunchSite
     return retVal;
   }
 
-  bool Downloader::GetUrlToFile(const std::string& file, const std::string& url)
+  bool Downloader::GetUrlToFile(
+    const std::filesystem::path& file,
+    const std::string_view url
+  ) const
   {
     std::ofstream outFile(
       file, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc
@@ -137,7 +112,7 @@ namespace rustLaunchSite
     }
     CURLcode curlCode(CURLE_OK);
     curlCode = curlCode == CURLE_OK ?
-      curl_easy_setopt(curlPtr, CURLOPT_URL, url.c_str()) : curlCode;
+      curl_easy_setopt(curlPtr, CURLOPT_URL, url.data()) : curlCode;
     curlCode = curlCode == CURLE_OK ?
       curl_easy_setopt(curlPtr, CURLOPT_FOLLOWLOCATION, 1L) : curlCode;
     curlCode = curlCode == CURLE_OK ?
@@ -157,25 +132,28 @@ namespace rustLaunchSite
     return true;
   }
 
-  // get init handle, creating one if necessary (which in turn performs init)
-  // if weak pointer is valid, then there is a Downloader instance holding a
-  //  shared pointer to an active init handle and we can just return a copy of
-  //  that; otherwise create a new one, capture it in the weak pointer, and
-  //  return it
-  std::shared_ptr<rustLaunchSite::DownloaderInitHandle>
-    Downloader::GetDownloaderInitHandle()
+  Downloader::InitHandle Downloader::GetInitHandle()
   {
-    // lock mutex to prevent concurrent creation of multiple handles
-    std::scoped_lock lock(DOWNLOADER_INIT_HANDLE_MUTEX);
-    // attempt to upgrade weak pointer to shared pointer
-    auto handleSptr(DOWNLOADER_INIT_HANDLE_WPTR.lock());
-    if (!handleSptr)
+    static std::mutex mutex;
+    static std::size_t handleNumber{0};
+    static std::weak_ptr<std::size_t> handleWptr{};
+
+    std::scoped_lock lock{mutex};
+    if (handleWptr.expired())
     {
-      // no handle exists, so create and cache one
-      DOWNLOADER_INIT_HANDLE_WPTR = handleSptr =
-        std::make_shared<rustLaunchSite::DownloaderInitHandle>();
+      ++handleNumber;
+      std::cout << "Initializing downloader handle #" << handleNumber << std::endl;
+      curl_global_init(CURL_GLOBAL_ALL);
+      InitHandle handleSptr
+      {
+        &handleNumber, [](std::size_t const* hn)
+        {
+          std::cout << "Deinitializing downloader handle #" << *hn << std::endl;
+          curl_global_cleanup();
+        }
+      };
+      handleWptr = handleSptr;
     }
-    // return new or existing handle
-    return handleSptr;
+    return handleWptr.lock();
   }
 }

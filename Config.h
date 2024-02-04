@@ -1,6 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -16,6 +17,11 @@ namespace rustLaunchSite
 class Config
 {
 public:
+
+  enum class ModFramework
+  {
+    NONE, CARBON, OXIDE
+  };
 
   enum class SeedStrategy
   {
@@ -80,79 +86,79 @@ public:
 
   // accessor methods for loaded settings
 
-  std::string      GetInstallPath()                 const
+  std::filesystem::path GetInstallPath()                 const
     { return installPath_; }
-  std::string      GetInstallIdentity()             const
+  std::string           GetInstallIdentity()             const
     { return installIdentity_; }
-  std::string      GetPathsCache()                  const
+  std::filesystem::path GetPathsCache()                  const
     { return pathsCache_; }
-  std::string      GetPathsDownload()               const
+  std::filesystem::path GetPathsDownload()               const
     { return pathsDownload_; }
-  bool             GetProcessAutoRestart()          const
+  bool                  GetProcessAutoRestart()          const
     { return processAutoRestart_; }
-  int              GetProcessShutdownDelaySeconds() const
+  int                   GetProcessShutdownDelaySeconds() const
     { return processShutdownDelaySeconds_; }
-  std::string      GetRconPassword()                const
+  std::string           GetRconPassword()                const
     { return rconPassword_; }
-  std::string      GetRconIP()                      const
+  std::string           GetRconIP()                      const
     { return rconIP_; }
-  int              GetRconPort()                    const
+  int                   GetRconPort()                    const
     { return rconPort_; }
-  bool             GetRconPassthroughIP()           const
+  bool                  GetRconPassthroughIP()           const
     { return rconPassthroughIP_; }
-  bool             GetRconPassthroughPort()         const
+  bool                  GetRconPassthroughPort()         const
     { return rconPassthroughPort_; }
-  bool             GetRconLog()                     const
+  bool                  GetRconLog()                     const
     { return rconLog_; }
-  SeedStrategy     GetSeedStrategy()                const
+  SeedStrategy          GetSeedStrategy()                const
     { return seedStrategy_; }
-  int              GetSeedFixed()                   const
+  int                   GetSeedFixed()                   const
     { return seedFixed_; }
-  std::vector<int> GetSeedList()                    const
+  std::vector<int>      GetSeedList()                    const
     { return seedList_; }
-  bool             GetUpdateOnLaunch()              const
+  bool                  GetUpdateOnLaunch()              const
     { return updateOnLaunch_; }
-  bool             GetUpdateServer()                const
+  bool                  GetUpdateServer()                const
     { return updateServer_; }
-  bool             GetUpdateOxide()                 const
-    { return updateOxide_; }
-  int              GetUpdateIntervalMinutes()       const
+  ModFramework          GetUpdateModFramework()          const
+    { return updateModFramework_; }
+  int                   GetUpdateIntervalMinutes()       const
     { return updateIntervalMinutes_; }
-  bool             GetWipeOnProtocolChange()        const
+  bool                  GetWipeOnProtocolChange()        const
     { return wipeOnProtocolChange_; }
-  bool             GetWipeBlueprints()              const
+  bool                  GetWipeBlueprints()              const
     { return wipeBlueprints_; }
 
-  ParameterMapType GetMinusParams()                 const
+  ParameterMapType      GetMinusParams()                 const
     { return minusParams_; }
-  ParameterMapType GetPlusParams()                  const
+  ParameterMapType      GetPlusParams()                  const
     { return plusParams_; }
 
 private:
 
   // rustLaunchSite settings
 
-  std::string      installPath_;
-  std::string      installIdentity_;
-  std::string      pathsCache_;
-  std::string      pathsDownload_;
-  bool             processAutoRestart_;
-  int              processShutdownDelaySeconds_;
-  std::string      rconPassword_;
-  std::string      rconIP_;
-  int              rconPort_;
-  bool             rconPassthroughIP_;
-  bool             rconPassthroughPort_;
-  bool             rconLog_;
-  SeedStrategy     seedStrategy_;
-  int              seedFixed_;
-  std::vector<int> seedList_;
-  bool             updateOnLaunch_;
-  bool             updateServer_;
-  bool             updateOxide_;
-  int              updateIntervalMinutes_;
-  bool             wipeOnProtocolChange_;
-  bool             wipeBlueprints_;
+  std::filesystem::path installPath_;
+  std::string           installIdentity_;
+  std::filesystem::path pathsCache_;
+  std::filesystem::path pathsDownload_;
+  bool                  processAutoRestart_;
+  int                   processShutdownDelaySeconds_;
+  std::string           rconPassword_;
+  std::string           rconIP_;
+  int                   rconPort_;
+  bool                  rconPassthroughIP_;
+  bool                  rconPassthroughPort_;
+  bool                  rconLog_;
+  SeedStrategy          seedStrategy_;
+  int                   seedFixed_;
+  std::vector<int>      seedList_;
+  bool                  updateOnLaunch_;
+  bool                  updateServer_;
+  ModFramework          updateModFramework_;
+  int                   updateIntervalMinutes_;
+  bool                  wipeOnProtocolChange_;
+  bool                  wipeBlueprints_;
 
   // dedicatedServer settings
 
