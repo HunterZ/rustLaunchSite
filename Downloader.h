@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace rustLaunchSite
 {
@@ -28,11 +29,6 @@ namespace rustLaunchSite
       ///  the only state managed by this class.
       Downloader();
 
-      /// @brief Download specified URL contents to a string
-      /// @param url URL whose contents should be downloaded
-      /// @return Contents retrieved from URL, or empty string on failure
-      std::string GetUrlToString(const std::string_view url) const;
-
       /// @brief Download specified URL contents to a file
       /// @details The file will be truncated prior to download attempt.
       /// @param file File to which URL contents should be saved
@@ -40,8 +36,18 @@ namespace rustLaunchSite
       /// @return @c true on success, @c false on failure
       bool GetUrlToFile(
         const std::filesystem::path& file,
-        const std::string_view url
+        std::string_view url
       ) const;
+
+      /// @brief Download specified URL contents to a string
+      /// @param url URL whose contents should be downloaded
+      /// @return Contents retrieved from URL, or empty string on failure
+      std::string GetUrlToString(std::string_view url) const;
+
+      /// @brief Download specified URL contents to a byte vector
+      /// @param url URL whose contents should be downloaded
+      /// @return Contents retrieved from URL, or empty vector on failure
+      std::vector<char> GetUrlToVector(std::string_view url) const;
 
     private:
 

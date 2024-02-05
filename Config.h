@@ -82,7 +82,7 @@ public:
   ///  specified config file.
   /// @param configFile Configuration file to load
   /// @throw @c std::invalid_argument on parse or validation failure
-  explicit Config(const std::string& configFile);
+  explicit Config(std::filesystem::path configFile);
 
   // accessor methods for loaded settings
 

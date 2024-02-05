@@ -34,7 +34,7 @@ inline bool IsWritable(const std::filesystem::path& path)
   // (for MSVC, may need to include io.h and use _access() instead?)
   return (0 == access(path.string().c_str(), W_OK));
 }
-
+/*
 using ZipStatus = std::pair<ssize_t, ssize_t>;
 int ZipExtractCallback(const char* filenamePtr, void* argPtr)
 {
@@ -45,6 +45,26 @@ int ZipExtractCallback(const char* filenamePtr, void* argPtr)
   ++count;
   std::cout << "Extracted file " << count << "/" << total << ": " << filenamePtr << "\n";
   return 0;
+}
+*/
+
+// kubazip zip_entry_extract() callback handler
+std::size_t ZipExtractToFile
+(
+  void* contextPtr, std::uint64_t offset,
+  const void* dataPtr, const std::size_t dataSize
+)
+{
+  auto outFilePtr{static_cast<std::fstream*>(contextPtr)};
+  auto inDataPtr{static_cast<const char*>(dataPtr)};
+  if (!outFilePtr || !inDataPtr)
+  {
+    std::cout << "ERROR: Null data passed to zip extraction callback handler\n";
+    return 0;
+  }
+  // std::cout << "Extracting " << dataSize << " bytes at offset " << offset << "\n";
+  outFilePtr->write(inDataPtr, dataSize);
+  return dataSize;
 }
 
 enum class SteamCmdReadState
@@ -309,58 +329,129 @@ void Updater::UpdateFramework(const bool suppressWarning) const
   }
 
   // download latest Carbon/Oxide release
-  const auto& zipFile(downloadPath_ / "carbon.zip");
   const auto& url{GetLatestFrameworkURL()};
   if (url.empty())
   {
     std::cout << "WARNING: Cannot update " << frameworkTitle << " because download URL was not found\n";
     return;
   }
-  if (!downloaderSptr_->GetUrlToFile(zipFile, url))
+  // this is now downloaded into RAM because kubazip seems to interact weirdly
+  //  with std::filesystem on Windows + MSYS MinGW
+  const std::vector<char>& zipData{downloaderSptr_->GetUrlToVector(url)};
+  if (zipData.empty())
   {
-    std::cout << "ERROR: Failed to download " << frameworkTitle << "\n";
-    std::filesystem::remove(zipFile);
+    std::cout << "ERROR: Cannot update " << frameworkTitle << " because data was not downloaded from URL " << url << "\n";
     return;
   }
 
   // unzip Carbon/Oxide release into server installation directory
   // NOTE: both plugin frameworks currently release .zip files that are intended
   //  to be extracted directly into the server installation root
-  zip_t* zipPtr(zip_open(zipFile.string().c_str(), 0, 'r'));
+  //
+  // first, get the number of files in the zip
+  // TODO: use zip_stream_openwitherror() if vcpkg updates to newer kubazip
+  zip_t* zipPtr(zip_stream_open(zipData.data(), zipData.size(), 0, 'r'));
   if (!zipPtr)
   {
-    std::cout << "ERROR: Failed to open " << frameworkTitle << " zip\n";
-    std::filesystem::remove(zipFile);
+    std::cout << "ERROR: Failed to open zip data with length=" << zipData.size() << " downloaded from URL " << url << "\n";
     return;
   }
   const ssize_t zipEntries(zip_entries_total(zipPtr));
-  zip_close(zipPtr);
   if (zipEntries <= 0)
   {
-    std::cout << "ERROR: Failed to get valid file count from " << frameworkTitle << " zip: " << zip_strerror(static_cast<int>(zipEntries)) << "\n";
-    std::filesystem::remove(zipFile);
+    std::cout << "ERROR: Failed to get valid file count from downloaded zip data with length=" << zipData.size() << ": " << zip_strerror(static_cast<int>(zipEntries)) << "\n";
+    zip_close(zipPtr);
     return;
   }
-
-  ZipStatus zipStatus{0, zipEntries};
-  if
-  (
-    const int extractResult(zip_extract(
-      zipFile.string().c_str(), serverInstallPath_.string().c_str(),
-      ZipExtractCallback, &zipStatus
-    ));
-    extractResult
-  )
+  // loop over all zip entries
+  for (ssize_t i{0}; i < zipEntries; ++i)
   {
-    std::cout << "ERROR: Failed to extract " << frameworkTitle << " zip: " << zip_strerror(extractResult)<< "\n";
+    if
+    (
+      const auto openResult{zip_entry_openbyindex(zipPtr, i)};
+      openResult
+    )
+    {
+      std::cout << "ERROR: Failed to open zip entry - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(openResult) << "\n";
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    std::string_view entryName{zip_entry_name(zipPtr)};
+    if (entryName.empty())
+    {
+      std::cout << "ERROR: Failed to determine zip entry name - " << frameworkTitle << " installation may now be corrupt!\n";
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    const int isDirStatus{zip_entry_isdir(zipPtr)};
+    if (isDirStatus < 0)
+    {
+      std::cout << "ERROR: Failed to determine zip entry '" << entryName << "' directory status - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(isDirStatus) << "\n";
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    // kubazip seems to always return isDir=0, even for obvious directory
+    //  entries whose names end in a slash, so add that to the heuristic
+    const bool isDir{isDirStatus != 0 || entryName.back() == '/' || entryName.back() == '\\'};
+    // calculate the full path relative to server installation
+    std::filesystem::path entryPath{(serverInstallPath_ / entryName).make_preferred()};
+    std::cout << "Extracting zip entry #" << i+1 << "/" << zipEntries << ": " << (isDir ? "Directory" : "File") << " '" << entryName << "' to '" << entryPath << "'\n";
+    // get the parent path if a file, or the full path if a dir
+    std::filesystem::path containingDir{isDir ? entryPath : entryPath.parent_path()};
+    // std::cout << "Creating path (unless it already exists): '" << containingDir << "'\n";
+    // create the directory tree
+    if
+    (
+      std::error_code ec{};
+      // false is returned if dir already exists, so need to check ec also
+      !std::filesystem::create_directories(containingDir, ec) && ec
+    )
+    {
+      std::cout << "ERROR: Failed to replicate path '" << containingDir << "' - " << frameworkTitle << " installation may now be corrupt! Error: " << ec.message() << "\n";
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    if (isDir)
+    {
+      // nothing else to do for a directory
+      zip_entry_close(zipPtr);
+      continue;
+    }
+    // this is a file, so extract it
+    // start by opening the destination, truncating if it already exists
+    std::fstream outFile
+    {
+      entryPath, std::ios::binary | std::ios_base::out | std::ios_base::trunc
+    };
+    if (!outFile.is_open() || outFile.fail())
+    {
+      std::cout << "ERROR: Failure opening file '" << entryPath << "' for write - " << frameworkTitle << " installation may now be corrupt!\n";
+      outFile.close();
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    // now pass this to kubazip with pointer to a callback that will chunk the
+    //  data out to the file
+    if
+    (
+      const int extractResult
+      {
+        zip_entry_extract(zipPtr, ZipExtractToFile, &outFile)
+      };
+      extractResult
+    )
+    {
+      std::cout << "ERROR: Failure extracting file '" << entryPath << "' from zip - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(extractResult) << "\n";
+    }
+    outFile.close();
+    zip_entry_close(zipPtr);
   }
-  else
-  {
-    // std::cout << frameworkTitle << " update successful\n";
-  }
-
-  // remove the zip either way
-  std::filesystem::remove(zipFile);
+  zip_close(zipPtr);
 }
 
 void Updater::UpdateServer() const
@@ -639,7 +730,7 @@ std::string Updater::GetLatestFrameworkURL() const
     return {};
   }
   const std::string_view frameworkURL{GetFrameworkURL(frameworkUpdateCheck_)};
-  const std::string_view frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
+  const std::string& frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
   const std::string_view frameworkAsset{GetFrameworkAsset(frameworkUpdateCheck_)};
   const std::string_view frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
 
@@ -677,7 +768,7 @@ std::string Updater::GetLatestFrameworkVersion() const
     return {};
   }
   const std::string_view frameworkURL{GetFrameworkURL(frameworkUpdateCheck_)};
-  const std::string_view frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
+  const std::string& frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
   const std::string_view frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
 
   try

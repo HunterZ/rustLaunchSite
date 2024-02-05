@@ -1,5 +1,7 @@
 #include "Downloader.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <curl/curl.h>
 #include <filesystem>
 #include <fstream>
@@ -52,46 +54,31 @@ namespace
     stringPtr->append(dataPtr, numBytes);
     return numBytes;
   }
+
+  // Curl requires a C-style callback handler, so this function accumulates
+  //  downloaded data into a binary data buffer
+  std::size_t WriteToVector(
+    char const* dataPtr, std::size_t size, std::size_t nmemb, std::vector<char>* vPtr
+  )
+  {
+    if (!dataPtr || !vPtr)
+    {
+      std::cout << "Null pointer(s) passed to Curl vector write handler\n";
+      return 0;
+    }
+    const std::size_t numBytes(size * nmemb);
+    std::copy(dataPtr, dataPtr + numBytes, std::back_inserter(*vPtr));
+    return numBytes;
+  }
 }
 
 namespace rustLaunchSite
 {
   Downloader::Downloader() = default;
 
-  std::string Downloader::GetUrlToString(const std::string_view url) const
-  {
-    std::string retVal;
-    auto* curlPtr(curl_easy_init());
-    if (!curlPtr)
-    {
-      std::cout << "WARNING: curl_easy_init() returned nullptr\n";
-      return retVal;
-    }
-    CURLcode curlCode(CURLE_OK);
-    curlCode = curlCode == CURLE_OK ?
-      curl_easy_setopt(curlPtr, CURLOPT_URL, url.data()) : curlCode;
-    curlCode = curlCode == CURLE_OK ?
-      curl_easy_setopt(curlPtr, CURLOPT_FOLLOWLOCATION, 1L) : curlCode;
-    curlCode = curlCode == CURLE_OK ?
-      curl_easy_setopt(curlPtr, CURLOPT_USERAGENT, "rustLaunchSite") : curlCode;
-    curlCode = curlCode == CURLE_OK ?
-      curl_easy_setopt(curlPtr, CURLOPT_WRITEFUNCTION, WriteToString) : curlCode;
-    curlCode = curlCode == CURLE_OK ?
-      curl_easy_setopt(curlPtr, CURLOPT_WRITEDATA, &retVal) : curlCode;
-    curlCode = curlCode == CURLE_OK ?
-      curl_easy_perform(curlPtr) : curlCode;
-    curl_easy_cleanup(curlPtr);
-    if (curlCode != CURLE_OK)
-    {
-      std::cout << "WARNING: Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "\n";
-      retVal.clear();
-    }
-    return retVal;
-  }
-
   bool Downloader::GetUrlToFile(
     const std::filesystem::path& file,
-    const std::string_view url
+    std::string_view url
   ) const
   {
     std::ofstream outFile(
@@ -130,6 +117,68 @@ namespace rustLaunchSite
       return false;
     }
     return true;
+  }
+
+  std::string Downloader::GetUrlToString(std::string_view url) const
+  {
+    std::string retVal{};
+    auto* curlPtr(curl_easy_init());
+    if (!curlPtr)
+    {
+      std::cout << "WARNING: curl_easy_init() returned nullptr\n";
+      return retVal;
+    }
+    CURLcode curlCode(CURLE_OK);
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_URL, url.data()) : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_FOLLOWLOCATION, 1L) : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_USERAGENT, "rustLaunchSite") : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_WRITEFUNCTION, WriteToString) : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_WRITEDATA, &retVal) : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_perform(curlPtr) : curlCode;
+    curl_easy_cleanup(curlPtr);
+    if (curlCode != CURLE_OK)
+    {
+      std::cout << "WARNING: Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "\n";
+      retVal.clear();
+    }
+    return retVal;
+  }
+
+  std::vector<char> Downloader::GetUrlToVector(std::string_view url) const
+  {
+    std::vector<char> retVal{};
+    auto* curlPtr(curl_easy_init());
+    if (!curlPtr)
+    {
+      std::cout << "WARNING: curl_easy_init() returned nullptr\n";
+      return retVal;
+    }
+    CURLcode curlCode(CURLE_OK);
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_URL, url.data()) : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_FOLLOWLOCATION, 1L) : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_USERAGENT, "rustLaunchSite") : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_WRITEFUNCTION, WriteToVector) : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_setopt(curlPtr, CURLOPT_WRITEDATA, &retVal) : curlCode;
+    curlCode = curlCode == CURLE_OK ?
+      curl_easy_perform(curlPtr) : curlCode;
+    curl_easy_cleanup(curlPtr);
+    if (curlCode != CURLE_OK)
+    {
+      std::cout << "WARNING: Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "\n";
+      retVal.clear();
+    }
+    return retVal;
   }
 
   Downloader::InitHandle Downloader::GetInitHandle()

@@ -83,18 +83,19 @@ void GetParameters(
 
 namespace rustLaunchSite
 {
-Config::Config(const std::string& configFile)
+Config::Config(std::filesystem::path configFile)
 {
+  configFile.make_preferred();
   // attempt to parse configFile via libconfig
   libconfig::Config cfg;
   try
   {
-    cfg.readFile(configFile);
+    cfg.readFile(configFile.string());
   }
   catch (const libconfig::FileIOException& e)
   {
     throw std::invalid_argument(
-      std::string("Exception reading config file '") + configFile + "': "
+      std::string("Exception reading config file '") + configFile.string() + "': "
       + e.what()
     );
   }
@@ -119,11 +120,14 @@ Config::Config(const std::string& configFile)
 
     // install
     installPath_ = cfg.lookup("rustLaunchSite.install.path").c_str();
+    installPath_.make_preferred();
     installIdentity_ = cfg.lookup("rustLaunchSite.install.identity").c_str();
 
     // paths
     pathsCache_ = cfg.lookup("rustLaunchSite.paths.cache").c_str();
+    pathsCache_.make_preferred();
     pathsDownload_ = cfg.lookup("rustLaunchSite.paths.download").c_str();
+    pathsDownload_.make_preferred();
 
     // process
     processAutoRestart_ = (
