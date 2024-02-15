@@ -1,0 +1,13 @@
+{
+  "name": "main",
+  "version-string": "latest",
+  "dependencies": [
+    "boost-process",
+    "curl",
+    "ixwebsocket",
+    "kubazip",
+    "libconfig",
+    "nlohmann-json",
+    "pugixml"
+  ]
+}

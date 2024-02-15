@@ -5,12 +5,12 @@ Rust dedicated server manager
 RLS is a C++ application whose aim is to act as a step-up from simple shell scripts that are commonly used to keep a self-hosted Rust dedicated server running. To this end, it currently provides the following major features:
 - Automatic restart of server application
 - Delayed shutdown with user notices when players are online
-- Automatic monitoring for and installation of server software and/or Oxide plugin framework updates, including server shutdown and restart
+- Automatic monitoring for and installation of server software and/or Carbon/Oxide plugin framework updates, including server shutdown and restart
 - Server configuration derived from RLS configuration to avoid redundancy
 
 Basically I want RLS to automate a lot of the backend maintenance drudgery of running a self-hosted server, so that I have more time to engage in community and possibly even play myself.
 
-RLS is currently only supported on Windows, but I tried to use cross-platform tools as much as possible in hopes of minimizing porting friction.
+RLS is currently only supported on Windows, but I've tried to use cross-platform tools as much as possible in hopes of minimizing porting friction.
 
 ## Usage & Runtime Dependencies
 Rust dedicated server (optionally with Oxide plugin framework) must be installed via SteamCMD prior to using RLS, and SteamCMD must still be available via the same path from which it was run to perform the install.
