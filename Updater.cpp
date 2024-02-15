@@ -51,7 +51,7 @@ int ZipExtractCallback(const char* filenamePtr, void* argPtr)
 // kubazip zip_entry_extract() callback handler
 std::size_t ZipExtractToFile
 (
-  void* contextPtr, std::uint64_t offset,
+  void* contextPtr, [[maybe_unused]] std::uint64_t offset,
   const void* dataPtr, const std::size_t dataSize
 )
 {
