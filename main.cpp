@@ -3,7 +3,7 @@
 #include "Server.h"
 #include "Updater.h"
 
-#include "ctrl-c/ctrl-c.h"
+#include "ctrl-c.h"
 
 #include <chrono>
 #include <condition_variable>

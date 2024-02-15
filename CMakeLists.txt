@@ -91,12 +91,12 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(pugixml CONFIG REQUIRED)
 # find_package(tiny-process-library CONFIG REQUIRED)
 
-# build ctrl-c library
-# just use the static version no matter what, since it's a clone-and-own
+# build ctrl-c library (as static for simplicity)
 add_library(ctrl-c STATIC
-  ctrl-c/ctrl-c.cpp
-  ctrl-c/ctrl-c.h
+  ctrl-c/src/ctrl-c.cpp
+  ctrl-c/src/ctrl-c.h
 )
+target_include_directories(ctrl-c INTERFACE "${CMAKE_SOURCE_DIR}/ctrl-c/src")
 
 # target for building the game binary
 add_executable(${PROJECT_NAME}
