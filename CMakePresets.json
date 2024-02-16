@@ -1,0 +1,68 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "common",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "build-type-debug",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "build-type-release",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "build-type-minsizerel",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    },
+    {
+      "name": "x64-mingw-static",
+      "hidden": true,
+      "cacheVariables": {
+        "VCPKG_HOST_TRIPLET": "x64-mingw-static",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
+      }
+    },
+    {
+      "name": "x64-mingw-static-debug",
+      "description": "MinGW64 Debug w/static linkage",
+      "inherits": [
+        "common",
+        "build-type-debug",
+        "x64-mingw-static"
+      ]
+    },
+    {
+      "name": "x64-mingw-static-minsizerel",
+      "description": "MinGW64 MinSizeRel w/static linkage",
+      "inherits": [
+        "common",
+        "build-type-minsizerel",
+        "x64-mingw-static"
+      ]
+    },
+    {
+      "name": "x64-mingw-static-release",
+      "description": "MinGW64 Release w/static linkage",
+      "inherits": [
+        "common",
+        "build-type-release",
+        "x64-mingw-static"
+      ]
+    }
+  ]
+}

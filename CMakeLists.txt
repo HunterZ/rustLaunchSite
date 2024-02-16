@@ -3,13 +3,17 @@ cmake_minimum_required(VERSION 3.26.3)
 # vcpkg goop
 # hard dependency on vcpkg is a concession to wanting to support static linking
 #  on windows without hating myself
-if(DEFINED ENV{VCPKG_DEFAULT_HOST_TRIPLET})
+if(NOT DEFINED VCPKG_HOST_TRIPLET AND DEFINED ENV{VCPKG_DEFAULT_HOST_TRIPLET})
   set(VCPKG_HOST_TRIPLET $ENV{VCPKG_DEFAULT_HOST_TRIPLET})
+  message("RLS: Set VCPKG_HOST_TRIPLET=${VCPKG_HOST_TRIPLET} from environment")
 endif()
-if(DEFINED ENV{VCPKG_DEFAULT_TRIPLET})
+if(NOT DEFINED VCPKG_TARGET_TRIPLET AND DEFINED ENV{VCPKG_DEFAULT_TRIPLET})
   set(VCPKG_TARGET_TRIPLET $ENV{VCPKG_DEFAULT_TRIPLET})
+  message("RLS: Set VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET} from environment")
 endif()
 # set(VCPKG_TRACE_FIND_PACKAGE ON)
+# try to always use release builds of dependencies for now
+set(VCPKG_BUILD_TYPE release)
 
 project(rustLaunchSite LANGUAGES CXX)
 
