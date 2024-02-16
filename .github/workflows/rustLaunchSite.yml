@@ -1,0 +1,98 @@
+name: Builder rustLaunchSite
+
+on:
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Set up MinGW
+        uses: egor-tensin/setup-mingw@v2.2.0
+        with:
+          platform: x64
+
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      # Setup vcpkg: ensures vcpkg is downloaded and built.
+      # Since vcpkg.json is being used later on to install the packages
+      # when `run-cmake` runs, no packages are installed at this time
+      # (and vcpkg does not run).
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11 # Always specify the specific _version_ of the
+                                  # action you need, `v11` in this case to stay up
+                                  # to date with fixes on the v11 branch.
+        #with:
+          # directory containing vcpkg sources
+          # vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+
+          # This is only needed if the command `vcpkg install` must run at this step.
+          # Instead it is highly suggested to let `run-cmake` to run vcpkg later on
+          # using the vcpkg.cmake toolchain. The default is `false`.
+          # runVcpkgInstall: true
+
+          # This is only needed if `runVpkgInstall` is `true`.
+          # This glob expression used to locate the vcpkg.json and  use
+          # its directory location as `working directory` when running `vcpkg install`.
+          # Change it to match a single manifest file you want to use.
+          # Note: do not use `${{ github.context }}` to compose the value as it
+          # contains backslashes that would be misinterpreted. Instead
+          # compose a value relative to the root of the repository using
+          # `**/path/from/root/of/repo/to/vcpkg.json` to match the desired `vcpkg.json`.
+          # vcpkgJsonGlob: '**/vcpkg.json'
+
+      - name: Run CMake consuming CMakePreset.json and run vcpkg to build packages
+        uses: lukka/run-cmake@v10
+        with:
+          # Path to CMakeLists.txt
+          # cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
+
+          # You could use CMake workflow presets defined in the CMakePresets.json
+          # with just this line below. Note this one cannot be used with any other
+          # preset input, it is mutually exclusive.
+          # workflowPreset: 'workflow-name'
+
+          # This is the name of the CMakePresets.json's configuration to use to generate
+          # the project files. This configuration leverages the vcpkg.cmake toolchain file to
+          # run vcpkg and install all dependencies specified in vcpkg.json.
+          # configurePreset: 'ninja-multi-vcpkg'
+          configurePreset: 'x64-mingw-static-minsizerel'
+
+          # Additional arguments can be appended to the cmake command.
+          # This is useful to reduce the number of CMake's Presets since you can reuse
+          # an existing preset with different variables.
+          # configurePresetAdditionalArgs: "['-DENABLE_YOUR_FEATURE=1']"
+
+          # This is the name of the CMakePresets.json's configuration to build the project.
+          # buildPreset: 'ninja-multi-vcpkg'
+          # Additional arguments can be appended when building, for example to specify the
+          # configuration to build.
+          # This is useful to reduce the number of CMake's Presets you need in CMakePresets.json.
+          # buildPresetAdditionalArgs: "['--config Release']"
+
+          # This is the name of the CMakePresets.json's configuration to test the project with.
+          # testPreset: 'ninja-multi-vcpkg'
+          # Additional arguments can be appended when testing, for example to specify the config
+          # to test.
+          # This is useful to reduce the number of CMake's Presets you need in CMakePresets.json.
+          # testPresetAdditionalArgs: "['--config Release']"
+
+    #env:
+    #  [OPTIONAL] Define the vcpkg's triplet you want to enforce, otherwise the default one
+    #  for the hosting system will be automatically choosen (x64 is the default on all
+    #  platforms, e.g. `x64-osx`).
+    #  VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
+    #
+    #  [OPTIONAL] If VCPKG_DEFAULT_TRIPLET is defined then it may also be desirable to set the host
+    #  triplet to avoid unintended cross compiling behavior.
+    #  VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.triplet }}
+    #
+    #  [OPTIONAL] By default the action disables vcpkg's telemetry by defining VCPKG_DISABLE_METRICS.
+    #  This behavior can be disabled by defining `VCPKG_ENABLE_METRICS` as follows.
+    #  VCPKG_ENABLE_METRICS: 1
+    #
