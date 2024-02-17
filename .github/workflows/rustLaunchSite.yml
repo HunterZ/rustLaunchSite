@@ -24,12 +24,14 @@ jobs:
         # only MinSizeRel for now
         buildtype: [ minsizerel ]
         include:
-          # unique set of triplet(s) for each OS
-          # NOTE: at least one triplet must be defined per OS
+          # unique set of triplet base(s) for each OS
+          # NOTES:
+          # - at least one triplet base must be defined per OS
+          # - tripletbase is matrixed with buildtype to form triplets
           - os: windows-latest
-            triplet: x64-mingw-static-release
+            tripletbase: x64-mingw-static
 
-    name: ${{ github.workflow }}.${{ matrix.os }}.${{ matrix.triplet }}.${{ matrix.buildtype }}
+    name: ${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
     runs-on: ${{ matrix.os }}
 
     defaults:
@@ -39,8 +41,8 @@ jobs:
 
     env:
       # keep everyone on the same page regarding triplet when running vcpkg
-      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
-      VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.triplet }}
+      VCPKG_DEFAULT_TRIPLET: ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+      VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
 
     steps:
       - name: Setup MSYS2
@@ -76,7 +78,7 @@ jobs:
           submodules: true
 
       - name: CMake configure
-        run: cmake --preset ${{ matrix.triplet }}-${{ matrix.buildtype }}
+        run: cmake --preset ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
 
       - name: CMake build
-        run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.triplet }}-${{ matrix.buildtype }}"
+        run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
