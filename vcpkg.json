@@ -4,6 +4,7 @@
   "dependencies": [
     "boost-filesystem",
     "boost-process",
+    "boost-property-tree",
     "curl",
     "ixwebsocket",
     "kubazip",
