@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  VCPKG_FEATURE_FLAGS: dependencygraph
+
 jobs:
   rustLaunchSite:
     strategy:
@@ -28,6 +32,10 @@ jobs:
 
     name: ${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
     runs-on: ${{ matrix.os }}
+
+    env:
+      VCPKG_DEFAULT_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      VCPKG_DEFAULT_HOST_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
     defaults:
       # use MSYS2 bash as the default shell
@@ -54,7 +62,7 @@ jobs:
 
       - name: Setup environment variables
         run: |
-          export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          export GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
           export VCPKG_FEATURE_FLAGS=dependencygraph
           export VCPKG_DEFAULT_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
           export VCPKG_DEFAULT_HOST_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
