@@ -11,10 +11,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Set up MinGW
-        uses: egor-tensin/setup-mingw@v2.2.0
-        with:
-          platform: x64
+      # - name: Set up MinGW
+      #   uses: egor-tensin/setup-mingw@v2.2.0
+      #   with:
+      #     platform: x64
 
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest
