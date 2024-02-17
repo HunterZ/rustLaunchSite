@@ -23,6 +23,10 @@ jobs:
           install: >-
             curl
             git
+            mingw-w64-x86_64-ninja
+
+      - name: Put MSYS2 MinGW64 on PATH
+        run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
 
       - name: Check out repository and submodules
         uses: actions/checkout@v4.1.1
