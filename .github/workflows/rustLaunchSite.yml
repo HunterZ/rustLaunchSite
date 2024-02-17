@@ -12,12 +12,11 @@ jobs:
       matrix:
         # only Windows for now
         os: [ windows-latest ]
-        # these are per-OS
-        triplet: []
         # only MinSizeRel for now
         buildtype: [ minsizerel ]
         include:
-          # triplet(s) to build for each OS
+          # unique set of triplet(s) for each OS
+          # NOTE: at least one triplet must be defined per OS
           - os: windows-latest
             triplet: x64-mingw-static
 
