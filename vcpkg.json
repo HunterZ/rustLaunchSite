@@ -11,5 +11,8 @@
     "libconfig",
     "nlohmann-json",
     "pugixml"
-  ]
+  ],
+  "vcpkg-configuration": {
+    "overlay-triplets": [ "./vcpkg-triplets" ]
+  }
 }
