@@ -48,8 +48,17 @@ jobs:
             ninja:p
             toolchain:p
 
-      # - name: Put MSYS2 MinGW64 on PATH
-      #   run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
+      - name: Add MinGW64 to MSYS2 shell PATH
+        run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
+
+      - name: Test CMake location
+        run: which cmake && cmake --version
+
+      - name: Test git location
+        run: which git && git --version
+
+      - name: Test GCC location
+        run: which gcc && gcc --version
 
       - name: Dump environment
         run: set
