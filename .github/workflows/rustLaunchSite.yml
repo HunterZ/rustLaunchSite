@@ -78,7 +78,7 @@ jobs:
         run: cmake --preset ${{ matrix.triplet }}-${{ matrix.buildtype }}
 
       - name: CMake build
-        run: cmake --build "${{ github.workspace }}/out/${{ matrix.triplet }}-${{ matrix.buildtype }}"
+        run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.triplet }}-${{ matrix.buildtype }}"
 
       # - name: Setup CMake
       #   uses: lukka/get-cmake@latest
