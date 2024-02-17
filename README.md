@@ -13,7 +13,7 @@ Basically I want RLS to automate a lot of the backend maintenance drudgery of ru
 RLS is currently only supported on Windows, but I've tried to use cross-platform tools as much as possible in hopes of minimizing porting friction.
 
 ## Usage & Runtime Dependencies
-Rust dedicated server (optionally with Oxide plugin framework) must be installed via SteamCMD prior to using RLS, and SteamCMD must still be available via the same path from which it was run to perform the install.
+Rust dedicated server (optionally with Carbon or Oxide plugin framework) must be installed via SteamCMD prior to using RLS, and SteamCMD must still be available via the same path from which it was run to perform the install.
 
 RLS must be run with elevated permissions ("Run As Administrator" on Windows) because SteamCMD seems to silently fail without it.
 
