@@ -10,11 +10,6 @@ on:
 permissions:
   contents: write
 
-# needed for vcpkg caching
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  VCPKG_FEATURE_FLAGS: dependencygraph
-
 jobs:
   rustLaunchSite:
     strategy:
@@ -39,11 +34,6 @@ jobs:
       run:
         shell: msys2 {0}
 
-    env:
-      # keep everyone on the same page regarding triplet when running vcpkg
-      VCPKG_DEFAULT_TRIPLET: ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
-      VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
-
     steps:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2.22.0
@@ -59,8 +49,15 @@ jobs:
             ninja:p
             toolchain:p
 
-      - name: Add MinGW64 to MSYS2 shell PATH
+      - name: Setup MinGW64
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
+
+      - name: Setup environment variables
+        run: |
+          export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          export VCPKG_FEATURE_FLAGS=dependencygraph
+          export VCPKG_DEFAULT_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+          export VCPKG_DEFAULT_HOST_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
       # - name: Capture diagnostic info
       #   run: |
