@@ -9,6 +9,9 @@
       "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "environment": {
         "VCPKG_ROOT": "${sourceDir}/vcpkg"
+      },
+      "cacheVariables": {
+        "VCPKG_BUILD_TYPE": "release"
       }
     },
     {

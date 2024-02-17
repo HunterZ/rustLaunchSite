@@ -12,8 +12,6 @@ if(NOT DEFINED VCPKG_TARGET_TRIPLET AND DEFINED ENV{VCPKG_DEFAULT_TRIPLET})
   message("RLS: Set VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET} from environment")
 endif()
 # set(VCPKG_TRACE_FIND_PACKAGE ON)
-# try to always use release builds of dependencies for now
-set(VCPKG_BUILD_TYPE release)
 
 project(rustLaunchSite LANGUAGES CXX)
 

@@ -42,28 +42,38 @@ jobs:
           install: >-
             curl
             git
-            mingw-w64-x86_64-ninja
+            make
+          pacboy: >-
+            cmake:p
+            ninja:p
+            toolchain:p
 
-      - name: Put MSYS2 MinGW64 on PATH
-        run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
+      # - name: Put MSYS2 MinGW64 on PATH
+      #   run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
 
-      - name: Configure Git line endings
+      - name: Dump environment
+        run: set
+
+      - name: Dump path
+        run: echo $PATH
+
+      - name: Setup git line endings
         run: git config --global core.autocrlf input
 
-      - name: Check out repository and submodules
+      - name: Setup submodules
         uses: actions/checkout@v4.1.1
         with:
           submodules: true
 
-      - name: Setup CMake and Ninja
-        uses: lukka/get-cmake@latest
+      # - name: Setup CMake
+      #   uses: lukka/get-cmake@latest
 
       # Setup vcpkg: ensures vcpkg is downloaded and built.
       # Since vcpkg.json is being used later on to install the packages
       # when `run-cmake` runs, no packages are installed at this time
       # (and vcpkg does not run).
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11 # Always specify the specific _version_ of the
+      # - name: Setup vcpkg
+      #   uses: lukka/run-vcpkg@v11 # Always specify the specific _version_ of the
                                   # action you need, `v11` in this case to stay up
                                   # to date with fixes on the v11 branch.
         #with:
