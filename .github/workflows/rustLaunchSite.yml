@@ -7,12 +7,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: windows-latest
+  rustLaunchSite:
+    strategy:
+      matrix:
+        # only Windows for now
+        os: [ windows-latest ]
+        # these are per-OS
+        triplet: []
+        # only MinSizeRel for now
+        buildtype: [ minsizerel ]
+        include:
+          # triplet(s) to build for each OS
+          - os: windows-latest
+            triplet: x64-mingw-static
+
+    name: ${{ github.workflow }}-${{ matrix.os }}-${{ matrix.triplet }}-${{ matrix.buildtype }}
+    runs-on: ${{ matrix.os }}
 
     defaults:
+      # use MSYS2 bash as the default shell
       run:
         shell: msys2 {0}
+
+    env:
+      # keep everyone on the same page regarding triplet when running vcpkg
+      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
+      VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.triplet }}
 
     steps:
       - name: Setup MSYS2
@@ -81,7 +101,7 @@ jobs:
           # the project files. This configuration leverages the vcpkg.cmake toolchain file to
           # run vcpkg and install all dependencies specified in vcpkg.json.
           # configurePreset: 'ninja-multi-vcpkg'
-          configurePreset: 'x64-mingw-static-minsizerel'
+          configurePreset: '${{ matrix.triplet }}-${{ matrix.buildtype }}'
 
           # Additional arguments can be appended to the cmake command.
           # This is useful to reduce the number of CMake's Presets since you can reuse
@@ -101,18 +121,3 @@ jobs:
           # to test.
           # This is useful to reduce the number of CMake's Presets you need in CMakePresets.json.
           # testPresetAdditionalArgs: "['--config Release']"
-
-    #env:
-    #  [OPTIONAL] Define the vcpkg's triplet you want to enforce, otherwise the default one
-    #  for the hosting system will be automatically choosen (x64 is the default on all
-    #  platforms, e.g. `x64-osx`).
-    #  VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
-    #
-    #  [OPTIONAL] If VCPKG_DEFAULT_TRIPLET is defined then it may also be desirable to set the host
-    #  triplet to avoid unintended cross compiling behavior.
-    #  VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.triplet }}
-    #
-    #  [OPTIONAL] By default the action disables vcpkg's telemetry by defining VCPKG_DISABLE_METRICS.
-    #  This behavior can be disabled by defining `VCPKG_ENABLE_METRICS` as follows.
-    #  VCPKG_ENABLE_METRICS: 1
-    #
