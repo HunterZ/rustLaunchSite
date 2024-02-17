@@ -11,6 +11,12 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - name: Check out repository and submodules
+        uses: actions/checkout@v4.1.1
+        with:
+          submodules: true
+
+      # this doesn't seem needed
       # - name: Set up MinGW
       #   uses: egor-tensin/setup-mingw@v2.2.0
       #   with:
