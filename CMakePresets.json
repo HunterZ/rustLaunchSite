@@ -36,8 +36,8 @@
       "name": "x64-mingw-static-debug",
       "description": "MinGW64 Debug w/static linkage",
       "cacheVariables": {
-        "VCPKG_HOST_TRIPLET": "x64-mingw-static",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
+        "VCPKG_HOST_TRIPLET": "${presetName}",
+        "VCPKG_TARGET_TRIPLET": "${presetName}"
       },
       "inherits": [
         "common",
@@ -48,8 +48,8 @@
       "name": "x64-mingw-static-minsizerel",
       "description": "MinGW64 MinSizeRel w/static linkage",
       "cacheVariables": {
-        "VCPKG_HOST_TRIPLET": "x64-mingw-static-release",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release"
+        "VCPKG_HOST_TRIPLET": "${presetName}",
+        "VCPKG_TARGET_TRIPLET": "${presetName}"
       },
       "inherits": [
         "common",
@@ -60,8 +60,8 @@
       "name": "x64-mingw-static-release",
       "description": "MinGW64 Release w/static linkage",
       "cacheVariables": {
-        "VCPKG_HOST_TRIPLET": "x64-mingw-static-release",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release"
+        "VCPKG_HOST_TRIPLET": "${presetName}",
+        "VCPKG_TARGET_TRIPLET": "${presetName}"
       },
       "inherits": [
         "common",
