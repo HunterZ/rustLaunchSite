@@ -64,7 +64,7 @@ endif()
 
 # use config mode to prefer vcpkg versions
 #  ...except for Boost, because vcpkg uses special goop to work with FindBoost
-# set(Boost_NO_BOOST_CMAKE ON)
+set(Boost_NO_BOOST_CMAKE ON)
 # set(Boost_NO_WARN_NEW_VERSIONS ON)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
