@@ -6,7 +6,10 @@
       "hidden": true,
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
-      "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "environment": {
+        "VCPKG_ROOT": "${sourceDir}/vcpkg"
+      }
     },
     {
       "name": "build-type-debug",

@@ -28,6 +28,9 @@ jobs:
       - name: Put MSYS2 MinGW64 on PATH
         run: echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
 
+      - name: Configure Git line endings
+        run: git config --global core.autocrlf input
+
       - name: Check out repository and submodules
         uses: actions/checkout@v4.1.1
         with:
