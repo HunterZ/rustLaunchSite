@@ -60,12 +60,12 @@ jobs:
       - name: Setup MinGW64
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
-      - name: Setup environment variables
-        run: |
-          export GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-          export VCPKG_FEATURE_FLAGS=dependencygraph
-          export VCPKG_DEFAULT_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
-          export VCPKG_DEFAULT_HOST_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      # - name: Setup environment variables
+      #   run: |
+      #     export GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+      #     export VCPKG_FEATURE_FLAGS=dependencygraph
+      #     export VCPKG_DEFAULT_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      #     export VCPKG_DEFAULT_HOST_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
       # - name: Capture diagnostic info
       #   run: |
