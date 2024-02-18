@@ -84,9 +84,9 @@ jobs:
 
       # vcpkg stuff
       - name: Bootstrap vcpkg
-        run: pushd vcpkg && ./bootstrap-vcpkg.sh && popd
+        run: pushd vcpkg ; ./bootstrap-vcpkg.sh ; popd
       - name: Dry-run vcpkg
-        run: ${{ github.workspace }}/vcpkg/vcpkg install --dry-run
+        run: pushd vcpkg ; ./vcpkg install --dry-run ; popd
 
       # CMake stuff
       - name: CMake configure
