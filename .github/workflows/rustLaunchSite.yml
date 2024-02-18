@@ -78,10 +78,13 @@ jobs:
       # Git stuff
       - name: Setup git line endings
         run: git config --global core.autocrlf input
-      - name: Setup submodules
+      - name: Setup git workspace
         uses: actions/checkout@v4.1.1
-        with:
-          submodules: true
+        # with:
+        #   submodules: true
+      - name: Setup git submodules
+        # only do ctrl-c because vcpkg-action clones vcpkg rather then using the submodule
+        run: git submodule update --init --depth 1 ctrl-c
 
       # vcpkg stuff
       # - name: Bootstrap vcpkg
@@ -95,7 +98,8 @@ jobs:
         with:
           manifest-dir: ${{ github.workspace }}
           triplet: ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
-          cache-key: ${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+          # default cache key is already OS + final triplet!
+          # cache-key: ${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
           token: ${{ github.token }}
           github-binarycache: true
 
