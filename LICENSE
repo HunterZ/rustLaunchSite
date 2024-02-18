@@ -27,9 +27,9 @@ Dependency license information:
 
 Use of FOSS dependencies is intended to be in good faith. Here are links to their respective licenses:
 - Boost (custom): https://www.boost.org/users/license.html
-- Ctrl+C (MIT): See `ctrl-c/LICENSE`
+- Ctrl+C (MIT): https://github.com/evgenykislov/ctrl-c/blob/master/LICENSE
 - ixwebsocket (BSD3): https://github.com/machinezone/IXWebSocket/blob/master/LICENSE.txt
 - kubazip (PD): https://github.com/kuba--/zip/blob/master/UNLICENSE
-- libcurl (custom): https://github.com/curl/curl/blob/master/COPYING
 - libconfig (LGPL): https://github.com/hyperrealm/libconfig/blob/master/LICENSE
+- libcurl (custom): https://github.com/curl/curl/blob/master/COPYING
 - nlohmann_json (MIT): https://github.com/nlohmann/json/blob/develop/LICENSE.MIT

@@ -3,10 +3,10 @@ Rust dedicated server manager
 
 ## Introduction & Features
 RLS is a C++ application whose aim is to act as a step-up from simple shell scripts that are commonly used to keep a self-hosted Rust dedicated server running. To this end, it currently provides the following major features:
-- Automatic restart of server application
+- Automatic relaunch of server application
+- Monitoring for and automatica installation of RustDedicated server application and/or Carbon/Oxide plugin framework updates, including clean server shutdown and relaunch
 - Delayed shutdown with user notices when players are online
-- Automatic monitoring for and installation of server software and/or Carbon/Oxide plugin framework updates, including server shutdown and restart
-- Server configuration derived from RLS configuration to avoid redundancy
+- Some aspects of server configuration automatically derived from RLS configuration
 
 Basically I want RLS to automate a lot of the backend maintenance drudgery of running a self-hosted server, so that I have more time to engage in community and possibly even play myself.
 
@@ -17,7 +17,7 @@ Rust dedicated server (optionally with Carbon or Oxide plugin framework) must be
 
 RLS must be run with elevated permissions ("Run As Administrator" on Windows) because SteamCMD seems to silently fail without it.
 
-RLS should support being run as a service (e.g. via NSSM), but this has not yet been tested. If it receives a Ctrl+C, it will attempt an orderly server and application shutdown.
+RLS supports being run as a service (e.g. via NSSM/WinSW on Windows), as it attemps an orderly server and application shutdown on receipt of Ctrl+C. This also means clean nightly restarts can be triggered via an OS task scheduler job that restarts the service.
 
 RLS requires a single command line parameter: A path to an RLS configuration file. An example file (`example.cfg`) is included, which is heavily commented to help you figure things out.
 
@@ -26,18 +26,18 @@ RLS currently only logs to the standard console output. This can be redirected t
 ## Roadmap
 I have a lot of ideas for improving RLS. See the Issues section of the project, as I plan to capture my thoughts there.
 
-I should mention that some features mentioned in `example.cfg` have not been implemented yet - most notably wipe automation.
+I should also mention that some features mentioned in `example.cfg` have not been implemented yet - most notably wipe automation.
 
 ## Building & Library Dependencies
-RLS is written in C++ and was developed in VS Code using CMake, MSYS2 MinGW x64, and vcpkg. I use static linking to minimize deployment size and complexity, but dynamic linking _should_ be possible.
+RLS is written in C++ and was developed in VS Code using CMake, MSYS2 MinGW x64, and vcpkg. I use static linking to minimize deployment size and complexity, but dynamic linking _should_ be possible. A vcpkg manifest and CMake preset are provided, which assume that the environment variable VCPKG_ROOT is defined.
 
 RLS currently has the following FOSS library dependencies without modifications, all of which are available via vcpkg or MSYS2 except for Ctrl+C which was sourced from GitHub: https://github.com/evgenykislov/ctrl-c
-- Boost (Filesystem, Process)
+- Boost (filesystem, process, property-tree)
 - Ctrl+C
 - ixwebsocket
 - kubazip
-- libcurl
 - libconfig
+- libcurl
 - nlohmann_json
 
 ## Contributing

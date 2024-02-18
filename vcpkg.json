@@ -9,8 +9,7 @@
     "ixwebsocket",
     "kubazip",
     "libconfig",
-    "nlohmann-json",
-    "pugixml"
+    "nlohmann-json"
   ],
   "vcpkg-configuration": {
     "overlay-triplets": [ "./vcpkg-triplets" ]

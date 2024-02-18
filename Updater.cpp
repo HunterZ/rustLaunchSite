@@ -10,7 +10,6 @@
 #include <iostream>
 #include <kubazip/zip/zip.h>
 #include <nlohmann/json.hpp>
-#include <pugixml.hpp>
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
