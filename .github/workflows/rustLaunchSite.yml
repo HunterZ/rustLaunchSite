@@ -84,7 +84,7 @@ jobs:
 
       # vcpkg stuff
       - name: Bootstrap vcpkg
-        run: ${{ github.workspace }}/vcpkg/bootstrap-vcpkg.sh
+        run: pushd vcpkg && ./bootstrap-vcpkg.sh && popd
       - name: Dry-run vcpkg
         run: ${{ github.workspace }}/vcpkg/vcpkg install --dry-run
 
