@@ -43,6 +43,7 @@ jobs:
         shell: msys2 {0}
 
     steps:
+      # MSYS/MinGW stuff
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2.22.0
         with:
@@ -56,7 +57,6 @@ jobs:
             cmake:p
             ninja:p
             toolchain:p
-
       - name: Setup MinGW64
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
@@ -74,16 +74,22 @@ jobs:
       #     which gcc && gcc --version
       #     set
 
+      # Git stuff
       - name: Setup git line endings
         run: git config --global core.autocrlf input
-
       - name: Setup submodules
         uses: actions/checkout@v4.1.1
         with:
           submodules: true
 
+      # vcpkg stuff
+      - name: Bootstrap vcpkg
+        run: ${{ github.workspace }}/vcpkg/bootstrap-vcpkg.sh
+      - name: Dry-run vcpkg
+        run: ${{ github.workspace }}/vcpkg/vcpkg install --dry-run
+
+      # CMake stuff
       - name: CMake configure
         run: cmake -DVCPKG_INSTALL_OPTIONS="--debug" --preset ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
-
       - name: CMake build
         run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"

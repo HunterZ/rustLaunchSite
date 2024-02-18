@@ -151,9 +151,19 @@ target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 # ]])
 
 if (RLS_COPY_DEPS)
-  add_custom_command(TARGET rustLaunchSite
+  add_custom_command(TARGET ${PROJECT_NAME}
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:rustLaunchSite> $<TARGET_FILE_DIR:rustLaunchSite>
     COMMAND_EXPAND_LISTS
   )
 endif()
+
+install(TARGETS ${PROJECT_NAME})
+install(
+  FILES example.cfg
+  TYPE DATA
+)
+install(
+  FILES LICENSE README.md
+  TYPE DOC
+)
