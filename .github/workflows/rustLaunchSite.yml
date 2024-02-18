@@ -103,7 +103,7 @@ jobs:
 
       # CMake stuff
       - name: Configure project
-        run: cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}""
+        run: cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Build project
         run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Stage project
