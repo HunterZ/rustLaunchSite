@@ -1,0 +1,110 @@
+name: Builder rustLaunchSite
+
+on:
+  push:
+  pull_request:
+    branches: [ $default-branch ]
+  workflow_dispatch:
+
+# needed for vcpkg caching
+permissions:
+  contents: write
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # VCPKG_FEATURE_FLAGS: dependencygraph
+  VCPKG_DISABLE_METRICS: 1
+
+jobs:
+  rustLaunchSite:
+    strategy:
+      matrix:
+        # only Windows for now
+        os: [ windows-latest ]
+        # only MinSizeRel for now
+        buildtype: [ minsizerel ]
+        include:
+          # unique set of triplet base(s) for each OS
+          # NOTES:
+          # - at least one triplet base must be defined per OS
+          # - tripletbase is matrixed with buildtype to form triplets
+          - os: windows-latest
+            tripletbase: x64-mingw-static
+
+    name: ${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+    runs-on: ${{ matrix.os }}
+
+    env:
+      VCPKG_DEFAULT_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      VCPKG_DEFAULT_HOST_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+
+    defaults:
+      # use MSYS2 bash as the default shell
+      run:
+        shell: msys2 {0}
+
+    steps:
+      # MSYS/MinGW stuff
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2.22.0
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            curl
+            git
+            make
+          pacboy: >-
+            cmake:p
+            ninja:p
+            toolchain:p
+      - name: Setup MinGW64
+        run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
+
+      # - name: Setup environment variables
+      #   run: |
+      #     export GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+      #     export VCPKG_FEATURE_FLAGS=dependencygraph
+      #     export VCPKG_DEFAULT_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      #     export VCPKG_DEFAULT_HOST_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+
+      # - name: Capture diagnostic info
+      #   run: |
+      #     which cmake && cmake --version
+      #     which git && git --version
+      #     which gcc && gcc --version
+      #     set
+
+      # Git stuff
+      - name: Setup git line endings
+        run: git config --global core.autocrlf input
+      - name: Setup git workspace
+        uses: actions/checkout@v4.1.1
+        # with:
+        #   submodules: true
+      - name: Setup git submodules
+        # only do ctrl-c because vcpkg-action clones vcpkg rather then using the submodule
+        run: git submodule update --init --depth 1 ctrl-c
+
+      # vcpkg stuff
+      # - name: Bootstrap vcpkg
+      #   run: pushd vcpkg ; ./bootstrap-vcpkg.sh ; popd
+      # - name: Dry-run vcpkg
+      #   run: pushd vcpkg ; ./vcpkg install --dry-run ; popd
+
+      - name: Setup vcpkg
+        id: vcpkg
+        uses: johnwason/vcpkg-action@v6
+        with:
+          manifest-dir: ${{ github.workspace }}
+          triplet: ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+          # default cache key is already OS + final triplet!
+          # cache-key: ${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+          token: ${{ github.token }}
+          github-binarycache: true
+
+      # CMake stuff
+      - name: CMake configure
+        run: cmake --preset ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+      - name: CMake build
+        run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"

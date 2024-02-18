@@ -32,5 +32,6 @@
 *.app
 
 # custom
-/.vscode
-/build
+/.vscode/
+/build/
+/out/

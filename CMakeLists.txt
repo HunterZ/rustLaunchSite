@@ -3,24 +3,17 @@ cmake_minimum_required(VERSION 3.26.3)
 # vcpkg goop
 # hard dependency on vcpkg is a concession to wanting to support static linking
 #  on windows without hating myself
-if(DEFINED ENV{VCPKG_DEFAULT_HOST_TRIPLET})
+if(NOT DEFINED VCPKG_HOST_TRIPLET AND DEFINED ENV{VCPKG_DEFAULT_HOST_TRIPLET})
   set(VCPKG_HOST_TRIPLET $ENV{VCPKG_DEFAULT_HOST_TRIPLET})
+  message("RLS: Set VCPKG_HOST_TRIPLET=${VCPKG_HOST_TRIPLET} from environment")
 endif()
-if(DEFINED ENV{VCPKG_DEFAULT_TRIPLET})
+if(NOT DEFINED VCPKG_TARGET_TRIPLET AND DEFINED ENV{VCPKG_DEFAULT_TRIPLET})
   set(VCPKG_TARGET_TRIPLET $ENV{VCPKG_DEFAULT_TRIPLET})
+  message("RLS: Set VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET} from environment")
 endif()
 # set(VCPKG_TRACE_FIND_PACKAGE ON)
 
 project(rustLaunchSite LANGUAGES CXX)
-
-# vcpkg currently offers no working CMake goop for libconfig, so we have to do
-#  it the hard way (so much for not hating myself)
-# the good news is that it seems to set everything up for find_library() to work
-#  properly in all configurations without extra help
-find_library(LIBCONFIG_LIB libconfig REQUIRED)
-find_library(LIBCONFIG_IMPLIB "liblibconfig.dll.a")
-find_library(LIBCONFIGPP_LIB libconfig++ REQUIRED)
-find_library(LIBCONFIGPP_IMPLIB "liblibconfig++.dll.a")
 
 # follow vcpkg's lead on dynamic versus static linkage
 set(RLS_LIBS
@@ -30,8 +23,8 @@ set(RLS_LIBS
   CURL::libcurl
   ixwebsocket::ixwebsocket
   kubazip::kubazip
-  libconfig++
-  libconfig
+  libconfig::config++
+  libconfig::config
   nlohmann_json::nlohmann_json
 )
 
@@ -56,47 +49,35 @@ if(VCPKG_TARGET_TRIPLET MATCHES ".*static.*")
   message("RLS: Configuring for static linking")
   set(RLS_COPY_DEPS OFF)
   set(RLS_LINK_OPTS "${RLS_LINK_OPTS}" "-static") # "-static-libgcc" "-static-libstdc++" "-static")
-  add_library(libconfig STATIC IMPORTED)
-  add_library(libconfig++ STATIC IMPORTED)
   set(RLS_LIBS ${RLS_LIBS} pugixml::static)
   set(Boost_USE_STATIC_LIBS ON)
   set(Boost_USE_STATIC_RUNTIME ON)
 else()
   message("RLS: Configuring for dynamic linking")
   set(RLS_COPY_DEPS ON)
-  add_library(libconfig SHARED IMPORTED)
-  if(DEFINED LIBCONFIG_IMPLIB)
-    set_property(TARGET libconfig PROPERTY IMPORTED_IMPLIB "${LIBCONFIG_IMPLIB}")
-  endif()
-  add_library(libconfig++ SHARED IMPORTED)
-  if(DEFINED LIBCONFIGPP_IMPLIB)
-    set_property(TARGET libconfig++ PROPERTY IMPORTED_IMPLIB "${LIBCONFIGPP_IMPLIB}")
-  endif()
   set(RLS_LIBS ${RLS_LIBS} pugixml::pugixml)
   set(Boost_USE_STATIC_LIBS OFF)
   set(Boost_USE_STATIC_RUNTIME OFF)
 endif()
-set_property(TARGET libconfig PROPERTY IMPORTED_LOCATION "${LIBCONFIG_LIB}")
-set_property(TARGET libconfig++ PROPERTY IMPORTED_LOCATION "${LIBCONFIGPP_LIB}")
 
 # use config mode to prefer vcpkg versions
 #  ...except for Boost, because vcpkg uses special goop to work with FindBoost
-set(Boost_NO_BOOST_CMAKE ON)
-set(Boost_NO_WARN_NEW_VERSIONS ON)
+# set(Boost_NO_BOOST_CMAKE ON)
+# set(Boost_NO_WARN_NEW_VERSIONS ON)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(kubazip CONFIG REQUIRED)
+find_package(libconfig CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(pugixml CONFIG REQUIRED)
-# find_package(tiny-process-library CONFIG REQUIRED)
 
-# build ctrl-c library
-# just use the static version no matter what, since it's a clone-and-own
+# build ctrl-c library (as static for simplicity)
 add_library(ctrl-c STATIC
-  ctrl-c/ctrl-c.cpp
-  ctrl-c/ctrl-c.h
+  ctrl-c/src/ctrl-c.cpp
+  ctrl-c/src/ctrl-c.h
 )
+target_include_directories(ctrl-c INTERFACE "${CMAKE_SOURCE_DIR}/ctrl-c/src")
 
 # target for building the game binary
 add_executable(${PROJECT_NAME}
@@ -170,9 +151,19 @@ target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 # ]])
 
 if (RLS_COPY_DEPS)
-  add_custom_command(TARGET rustLaunchSite
+  add_custom_command(TARGET ${PROJECT_NAME}
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:rustLaunchSite> $<TARGET_FILE_DIR:rustLaunchSite>
     COMMAND_EXPAND_LISTS
   )
 endif()
+
+install(TARGETS ${PROJECT_NAME})
+install(
+  FILES example.cfg
+  TYPE DATA
+)
+install(
+  FILES LICENSE README.md
+  TYPE DOC
+)

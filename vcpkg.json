@@ -1,0 +1,18 @@
+{
+  "name": "main",
+  "version-string": "latest",
+  "dependencies": [
+    "boost-filesystem",
+    "boost-process",
+    "boost-property-tree",
+    "curl",
+    "ixwebsocket",
+    "kubazip",
+    "libconfig",
+    "nlohmann-json",
+    "pugixml"
+  ],
+  "vcpkg-configuration": {
+    "overlay-triplets": [ "./vcpkg-triplets" ]
+  }
+}
