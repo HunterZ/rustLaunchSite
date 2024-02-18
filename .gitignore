@@ -32,6 +32,7 @@
 *.app
 
 # custom
+/_CPack_Packages/
 /.vscode/
 /build/
 /out/

@@ -1,4 +1,4 @@
-name: Builder rustLaunchSite
+name: rustLaunchSite
 
 on:
   push:
@@ -17,7 +17,7 @@ env:
   VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
 
 jobs:
-  rustLaunchSite:
+  build:
     strategy:
       matrix:
         # only Windows for now
@@ -32,7 +32,7 @@ jobs:
           - os: windows-latest
             tripletbase: x64-mingw-static
 
-    name: ${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+    name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}
 
     env:
@@ -47,7 +47,7 @@ jobs:
     steps:
       # MSYS/MinGW stuff
       - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2.22.0
+        uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
@@ -80,7 +80,7 @@ jobs:
       - name: Setup git line endings
         run: git config --global core.autocrlf input
       - name: Setup git workspace
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -94,15 +94,24 @@ jobs:
         id: vcpkg
         uses: johnwason/vcpkg-action@v6
         with:
-          manifest-dir: ${{ github.workspace }}
-          triplet: ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+          manifest-dir: "${{ github.workspace }}"
+          triplet: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
           # default cache key is already OS + final triplet!
           # cache-key: ${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
           token: ${{ github.token }}
           github-binarycache: true
 
       # CMake stuff
-      - name: CMake configure
-        run: cmake --preset ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
-      - name: CMake build
+      - name: Configure project
+        run: cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}""
+      - name: Build project
         run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      - name: Stage project
+        run: cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+
+      # Upload stuff
+      - name: Package and upload project
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+          path: "${{ github.workspace }}/out/install/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"

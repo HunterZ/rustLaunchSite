@@ -13,7 +13,10 @@ if(NOT DEFINED VCPKG_TARGET_TRIPLET AND DEFINED ENV{VCPKG_DEFAULT_TRIPLET})
 endif()
 # set(VCPKG_TRACE_FIND_PACKAGE ON)
 
-project(rustLaunchSite LANGUAGES CXX)
+project(rustLaunchSite
+  LANGUAGES CXX
+  VERSION 0.0.1
+)
 
 # follow vcpkg's lead on dynamic versus static linkage
 set(RLS_LIBS
@@ -125,6 +128,8 @@ target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 # target_link_libraries(updaterTest PRIVATE ${RLS_LIBS})
 # target_link_options(updaterTest PRIVATE "${RLS_LINK_OPTS}")
 
+include(GNUInstallDirs)
+
 # install(CODE [[
 #   file(GET_RUNTIME_DEPENDENCIES
 #     EXECUTABLES $<TARGET_FILE:rustLaunchSite>
@@ -147,7 +152,7 @@ target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 #   endif()
 # ]])
 
-if (RLS_COPY_DEPS)
+if(RLS_COPY_DEPS)
   add_custom_command(TARGET ${PROJECT_NAME}
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:rustLaunchSite> $<TARGET_FILE_DIR:rustLaunchSite>
@@ -164,3 +169,28 @@ install(
   FILES LICENSE README.md
   TYPE DOC
 )
+
+# generate a fake build ID if we weren't given one by the environment (e.g. from a CI/CD workflow/pipeline)
+if(NOT DEFINED BUILD_ID)
+  set (BUILD_ID "LOCAL")
+  if(DEFINED VCPKG_TARGET_TRIPLET)
+    set (BUILD_ID "${BUILD_ID}-${VCPKG_TARGET_TRIPLET}")
+  endif()
+  message("RLS: Synthesized build ID: ${BUILD_ID}")
+else()
+  message("RLS: Using external build ID: ${BUILD_ID}")
+endif()
+
+# set package variables
+# NOTE: CMake uses project name/version for packaging, so we don't need to re-specify those
+set(CPACK_GENERATOR ZIP)
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Rust dedicated server manager")
+set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}-${BUILD_ID}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "C:\\Games\\${PROJECT_NAME}")
+set(CPACK_PACKAGE_RELOCATABLE ON)
+set(CPACK_PACKAGE_VENDOR "HunterZ")
+set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${PROJECT_SOURCE_DIR}/README.md")
+set(CPACK_STRIP_FILES ON)
+set(CPACK_VERBATIM_VARIABLES ON)
+include(CPack)
