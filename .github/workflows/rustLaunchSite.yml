@@ -83,13 +83,23 @@ jobs:
           submodules: true
 
       # vcpkg stuff
-      - name: Bootstrap vcpkg
-        run: pushd vcpkg ; ./bootstrap-vcpkg.sh ; popd
-      - name: Dry-run vcpkg
-        run: pushd vcpkg ; ./vcpkg install --dry-run ; popd
+      # - name: Bootstrap vcpkg
+      #   run: pushd vcpkg ; ./bootstrap-vcpkg.sh ; popd
+      # - name: Dry-run vcpkg
+      #   run: pushd vcpkg ; ./vcpkg install --dry-run ; popd
+
+      - name: Setup vcpkg
+        id: vcpkg
+        uses: johnwason/vcpkg-action@v6
+        with:
+          manifest-dir: ${{ github.workspace }}
+          triplet: ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+          cache-key: ${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+          token: ${{ github.token }}
+          github-binarycache: true
 
       # CMake stuff
       - name: CMake configure
-        run: cmake -DVCPKG_INSTALL_OPTIONS="--debug" --preset ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+        run: cmake --preset ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
       - name: CMake build
         run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
