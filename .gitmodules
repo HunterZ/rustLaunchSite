@@ -1,6 +1,3 @@
 [submodule "ctrl-c"]
 	path = ctrl-c
 	url = ../../evgenykislov/ctrl-c.git
-[submodule "vcpkg"]
-	path = vcpkg
-	url = ../../microsoft/vcpkg.git
