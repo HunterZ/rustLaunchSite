@@ -83,7 +83,7 @@ jobs:
           submodules: true
 
       - name: CMake configure
-        run: cmake --preset ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
+        run: cmake -DVCPKG_INSTALL_OPTIONS="--debug" --preset ${{ matrix.tripletbase }}-${{ matrix.buildtype }}
 
       - name: CMake build
         run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
