@@ -81,11 +81,8 @@ jobs:
         run: git config --global core.autocrlf input
       - name: Setup git workspace
         uses: actions/checkout@v4.1.1
-        # with:
-        #   submodules: true
-      - name: Setup git submodules
-        # only do ctrl-c because vcpkg-action clones vcpkg rather then using the submodule
-        run: git submodule update --init --depth 1 ctrl-c
+        with:
+          submodules: true
 
       # vcpkg stuff
       # - name: Bootstrap vcpkg
