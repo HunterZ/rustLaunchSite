@@ -10,10 +10,11 @@ on:
 permissions:
   contents: write
 
+# env vars common to all jobs
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # VCPKG_FEATURE_FLAGS: dependencygraph
-  VCPKG_DISABLE_METRICS: 1
+  VCPKG_DISABLE_METRICS: true
   VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
 
 jobs:
@@ -21,8 +22,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - {os: windows-latest, buildtype: minsizerel, tripletbase: x64-mingw-static, msystem: MINGW64}
-          - {os: windows-latest, buildtype: minsizerel, tripletbase: x64-windows-static-md, msystem: UCRT64}
+          - {os: windows-latest, tripletbase: x64-mingw-static,      buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}"}
+          - {os: windows-latest, tripletbase: x64-windows-static-md, buildtype: minsizerel, msystem: NONE,    shell: "bash"}
 
     name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}
@@ -32,13 +33,14 @@ jobs:
       VCPKG_DEFAULT_HOST_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
     defaults:
-      # use MSYS2 bash as the default shell
+      # use MSYS2 or Git bash as the default shell
       run:
-        shell: msys2 {0}
+        shell: ${{ matrix.shell }}
 
     steps:
       # MSYS/MinGW stuff
-      - name: Setup MSYS2
+      - name: Install MSYS2 ${{ matrix.msystem }}
+        if: ${{ matrix.msystem != 'NONE' }}
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
@@ -51,8 +53,8 @@ jobs:
             cmake:p
             ninja:p
             toolchain:p
-      - name: Setup ${{ matrix.msystem }}
-        if: ${{matrix.tripletbase != 'x64-windows-static-md'}}
+      - name: Setup MSYS2 ${{ matrix.msystem }}
+        if: ${{ matrix.msystem == 'MINGW64' }}
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
       # - name: Setup environment variables
@@ -82,15 +84,12 @@ jobs:
       #   run: pushd vcpkg ; ./bootstrap-vcpkg.sh ; popd
       # - name: Dry-run vcpkg
       #   run: pushd vcpkg ; ./vcpkg install --dry-run ; popd
-
       - name: Setup vcpkg
         id: vcpkg
         uses: johnwason/vcpkg-action@v6
         with:
           manifest-dir: "${{ github.workspace }}"
           triplet: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
-          # default cache key is already OS + final triplet!
-          # cache-key: ${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
           token: ${{ github.token }}
           github-binarycache: true
 
