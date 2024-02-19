@@ -33,11 +33,13 @@ set(RLS_LIBS
 
 # strip release build binaries
 # yes, this is GCC-specific; use MinGW on Windows!
-set(RLS_LINK_OPTS
-  "$<$<CONFIG:MinSizeRel>:-s>"
-  "$<$<CONFIG:Release>:-s>"
+# set(RLS_LINK_OPTS
+#   "$<$<CONFIG:MinSizeRel>:-s>"
+#   "$<$<CONFIG:Release>:-s>"
   # -Wl,-subsystem,windows
-)
+# )
+# NOTE: this is now done during cmake install or cpack
+
 set(BOOST_USE_DEBUG_LIBS
   $<$<CONFIG:Debug>:ON>
   $<$<CONFIG:MinSizeRel>:OFF>

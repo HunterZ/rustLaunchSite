@@ -64,6 +64,42 @@
         "common",
         "build-type-release"
       ]
+    },
+    {
+      "name": "x64-windows-static-md-debug",
+      "description": "MSVC Debug w/static linkage",
+      "cacheVariables": {
+        "VCPKG_HOST_TRIPLET": "${presetName}",
+        "VCPKG_TARGET_TRIPLET": "${presetName}"
+      },
+      "inherits": [
+        "common",
+        "build-type-debug"
+      ]
+    },
+    {
+      "name": "x64-windows-static-md-minsizerel",
+      "description": "MSVC MinSizeRel w/static linkage",
+      "cacheVariables": {
+        "VCPKG_HOST_TRIPLET": "${presetName}",
+        "VCPKG_TARGET_TRIPLET": "${presetName}"
+      },
+      "inherits": [
+        "common",
+        "build-type-minsizerel"
+      ]
+    },
+    {
+      "name": "x64-windows-static-md-release",
+      "description": "MSVC Release w/static linkage",
+      "cacheVariables": {
+        "VCPKG_HOST_TRIPLET": "${presetName}",
+        "VCPKG_TARGET_TRIPLET": "${presetName}"
+      },
+      "inherits": [
+        "common",
+        "build-type-release"
+      ]
     }
   ]
 }

@@ -27,10 +27,10 @@ jobs:
         include:
           # unique set of triplet base(s) for each OS
           # NOTES:
-          # - at least one triplet base must be defined per OS
+          # - at least one triplet base and msystem must be defined per OS
           # - tripletbase is matrixed with buildtype to form triplets
-          - os: windows-latest
-            tripletbase: x64-mingw-static
+          - {os: windows-latest, tripletbase: x64-mingw-static, msystem: MINGW64}
+          - {os: windows-latest, tripletbase: x64-windows-static-md, msystem: UCRT64}
 
     name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}
@@ -49,7 +49,7 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: ${{ matrix.msystem }}
           update: true
           install: >-
             curl
@@ -59,7 +59,8 @@ jobs:
             cmake:p
             ninja:p
             toolchain:p
-      - name: Setup MinGW64
+      - name: Setup ${{ matrix.msystem }}
+        if: ${{matrix.tripletbase != 'x64-windows-static-md'}}
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
       # - name: Setup environment variables
@@ -106,8 +107,11 @@ jobs:
         run: cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Build project
         run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      - name: Setup CMake install stripping
+        if: ${{ matrix.buildtype != 'debug' }}
+        run: export RLS_STRIP="--strip"
       - name: Stage project
-        run: cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: cmake --install ${RLS_STRIP} "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
       # Upload stuff
       - name: Package and upload project
