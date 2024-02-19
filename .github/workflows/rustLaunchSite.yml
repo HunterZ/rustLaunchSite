@@ -57,6 +57,11 @@ jobs:
         if: ${{ matrix.msystem == 'MINGW64' }}
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
+      # Ninja stuff
+      - name: Install Ninja
+        if: ${{ matrix.msystem == 'NONE' }}
+        uses: seanmiddleditch/gha-setup-ninja@master
+
       # - name: Setup environment variables
       #   run: |
       #     export GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
