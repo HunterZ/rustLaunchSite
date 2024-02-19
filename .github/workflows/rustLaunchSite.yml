@@ -61,6 +61,11 @@ jobs:
       - name: Install Ninja
         if: ${{ matrix.msystem == 'NONE' }}
         uses: seanmiddleditch/gha-setup-ninja@master
+        with:
+          destination: "${{ github.workspace }}/ninja-build"
+      - name: Setup Ninja
+        if: ${{ matrix.msystem == 'NONE' }}
+        run: export PATH="${{ github.workspace }}/ninja-build:${PATH}"
 
       # - name: Setup environment variables
       #   run: |
