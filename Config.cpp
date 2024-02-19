@@ -40,25 +40,25 @@ void GetParameters(
       case libconfig::Setting::TypeInt64:
       {
         // std::cout << "Setting " << setting.getPath() << ", TypeInt* => Name " << name << ", int, Value " << static_cast<int>(setting) << std::endl;
-        pMap.try_emplace(name, static_cast<int>(setting));
+        pMap.try_emplace(name, setting.operator int());
       }
       break;
       case libconfig::Setting::TypeFloat:
       {
         // std::cout << "Setting " << setting.getPath() << ", TypeFloat => Name " << name << ", double, Value " << static_cast<double>(setting) << std::endl;
-        pMap.try_emplace(name, static_cast<double>(setting));
+        pMap.try_emplace(name, setting.operator double());
       }
       break;
       case libconfig::Setting::TypeString:
       {
         // std::cout << "Setting " << setting.getPath() << ", TypeString => Name " << name << ", string, Value " << static_cast<std::string>(setting) << std::endl;
-        pMap.try_emplace(name, static_cast<std::string>(setting));
+        pMap.try_emplace(name, setting.operator std::string());
       }
       break;
       case libconfig::Setting::TypeBoolean:
       {
         // std::cout << "Setting " << setting.getPath() << ", TypeBoolean => Name " << name << ", bool, Value " << static_cast<bool>(setting) << std::endl;
-        pMap.try_emplace(name, static_cast<bool>(setting));
+        pMap.try_emplace(name, setting.operator bool());
       }
       break;
       case libconfig::Setting::TypeGroup:

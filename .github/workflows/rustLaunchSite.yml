@@ -22,8 +22,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - {os: windows-latest, tripletbase: x64-mingw-static,      buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}"}
-          - {os: windows-latest, tripletbase: x64-windows-static-md, buildtype: minsizerel, msystem: NONE,    shell: "bash"}
+          - {os: windows-latest, tripletbase: x64-mingw-static,   buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}"}
+          - {os: windows-latest, tripletbase: x64-windows-static, buildtype: minsizerel, msystem: NONE,    shell: "bash"}
 
     name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}

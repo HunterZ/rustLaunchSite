@@ -40,7 +40,7 @@ set(BOOST_USE_RELEASE_LIBS
 if(VCPKG_TARGET_TRIPLET MATCHES ".*static.*")
   message("RLS: Configuring for static linking")
   set(RLS_COPY_DEPS OFF)
-  set(RLS_LINK_OPTS "${RLS_LINK_OPTS}" "-static") # "-static-libgcc" "-static-libstdc++" "-static")
+  set(RLS_LINK_OPTS "${RLS_LINK_OPTS}" "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-static>") # "-static-libgcc" "-static-libstdc++" "-static")
   set(Boost_USE_STATIC_LIBS ON)
   set(Boost_USE_STATIC_RUNTIME ON)
 else()
@@ -53,7 +53,7 @@ endif()
 # use config mode to prefer vcpkg versions
 #  ...except for Boost, because vcpkg uses special goop to work with FindBoost
 # set(Boost_NO_BOOST_CMAKE ON)
-# set(Boost_NO_WARN_NEW_VERSIONS ON)
+set(Boost_NO_WARN_NEW_VERSIONS ON)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
@@ -126,6 +126,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 
+add_custom_command(TARGET ${PROJECT_NAME}
+  POST_BUILD
+  DEPENDS ${PROJECT_NAME}
+  COMMAND "$<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:${CMAKE_STRIP}>"
+    ARGS "--strip-all" "$<TARGET_FILE:${PROJECT_NAME}>"
+)
+
 # add_executable(downloaderTest
 #   Downloader.cpp
 #   Downloader.h
@@ -155,6 +162,7 @@ target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 # target_link_options(updaterTest PRIVATE "${RLS_LINK_OPTS}")
 
 include(GNUInstallDirs)
+# include(InstallRequiredSystemLibraries)
 
 # install(CODE [[
 #   file(GET_RUNTIME_DEPENDENCIES

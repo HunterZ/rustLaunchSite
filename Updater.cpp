@@ -3,6 +3,11 @@
 #include "Config.h"
 #include "Downloader.h"
 
+#if _MSC_VER
+  // make Boost happy when building with MSVC
+  #include <SDKDDKVer.h>
+#endif
+
 #include <boost/process.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -14,6 +19,12 @@
 #include <stdexcept>
 #include <system_error>
 #include <vector>
+
+#if _MSC_VER
+  #include <io.h> // _access_s()
+#else
+  #include <unistd.h> // access()
+#endif
 
 namespace
 {
@@ -28,10 +39,12 @@ inline bool IsDirectory(const std::filesystem::path& path)
 
 inline bool IsWritable(const std::filesystem::path& path)
 {
-  // this sucks and may not work with MSVC, but std::filesystem is garbage in
-  //  this area
-  // (for MSVC, may need to include io.h and use _access() instead?)
+  // std::filesystem is garbage here, so we need to use access() or similar
+#if _MSC_VER
+  return (0 == _access_s(path.string().c_str(), 2));
+#else
   return (0 == access(path.string().c_str(), W_OK));
+#endif
 }
 /*
 using ZipStatus = std::pair<ssize_t, ssize_t>;
@@ -742,7 +755,7 @@ std::string Updater::GetLatestFrameworkURL() const
     //  ported to that OS
     for (const auto& asset : j["assets"])
     {
-      if (asset["name"] == frameworkAsset)
+      if (asset["name"].get<std::string>() == frameworkAsset)
       {
         return asset["browser_download_url"];
       }
@@ -817,9 +830,5 @@ std::string Updater::GetLatestFrameworkVersion() const
     std::cout << "Input data:\n" << frameworkInfo << "\n";
     return {};
   }
-
-  std::cout << "ERROR: Unknown failure when attempting to get latest plugin framework release version\n";
-  std::cout << "Input data:\n" << frameworkInfo << "\n";
-  return {};
 }
 }
