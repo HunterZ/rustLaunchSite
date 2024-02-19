@@ -18,19 +18,6 @@ project(rustLaunchSite
   VERSION 0.0.1
 )
 
-# follow vcpkg's lead on dynamic versus static linkage
-set(RLS_LIBS
-  Boost::boost
-  Boost::filesystem
-  ctrl-c
-  CURL::libcurl
-  ixwebsocket::ixwebsocket
-  kubazip::kubazip
-  libconfig::config++
-  libconfig::config
-  nlohmann_json::nlohmann_json
-)
-
 # strip release build binaries
 # yes, this is GCC-specific; use MinGW on Windows!
 # set(RLS_LINK_OPTS
@@ -74,6 +61,32 @@ find_package(kubazip CONFIG REQUIRED)
 find_package(libconfig CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
+# vcpkg libconfig provides inconsistently named targets
+set(LIBCONFIG_CPP_TARGET "${LIBCONFIG_CPP_TARGET}")
+foreach(RLS_LCPPT "${LIBCONFIG_CPP_TARGET}" "libconfig::config++" "libconfig::libconfig++" "libconfig++" "config++")
+  if(TARGET "${RLS_LCPPT}")
+    set(LIBCONFIG_CPP_TARGET "${RLS_LCPPT}")
+    break()
+  endif()
+endforeach()
+if(TARGET "${LIBCONFIG_CPP_TARGET}")
+  message("RLS: Found libconfig++ target name: ${LIBCONFIG_CPP_TARGET}")
+else()
+  message(ERROR "RLS: Failed to determine libconfig++ target name")
+endif()
+set(LIBCONFIG_C_TARGET "${LIBCONFIG_C_TARGET}")
+foreach(RLS_LCT "${LIBCONFIG_C_TARGET}" "libconfig::config" "libconfig::libconfig" "libconfig" "config")
+  if(TARGET "${RLS_LCT}")
+    set(LIBCONFIG_C_TARGET "${RLS_LCT}")
+    break()
+  endif()
+endforeach()
+if(TARGET "${LIBCONFIG_C_TARGET}")
+  message("RLS: Found libconfig target name: ${LIBCONFIG_C_TARGET}")
+else()
+  message(ERROR "RLS: Failed to determine libconfig target name")
+endif()
+
 # build ctrl-c library (as static for simplicity)
 add_library(ctrl-c STATIC
   ctrl-c/src/ctrl-c.cpp
@@ -99,7 +112,17 @@ target_compile_options(${PROJECT_NAME} PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
   $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE ${RLS_LIBS})
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  Boost::boost
+  Boost::filesystem
+  ctrl-c
+  CURL::libcurl
+  ixwebsocket::ixwebsocket
+  kubazip::kubazip
+  "${LIBCONFIG_CPP_TARGET}"
+  "${LIBCONFIG_C_TARGET}"
+  nlohmann_json::nlohmann_json
+)
 target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 
 # add_executable(downloaderTest

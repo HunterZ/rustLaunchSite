@@ -24,6 +24,8 @@ jobs:
         os: [ windows-latest ]
         # only MinSizeRel for now
         buildtype: [ minsizerel ]
+        tripletbase: [""]
+        msystem: [""]
         include:
           # unique set of triplet base(s) for each OS
           # NOTES:
