@@ -57,16 +57,18 @@ jobs:
         if: ${{ matrix.msystem == 'MINGW64' }}
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
-      # Ninja/MSVC stuff
-      - name: Install Ninja
+      # MSVC+tools stuff
+      # - name: Install Ninja
+      #   if: ${{ matrix.msystem == 'MSVC' }}
+      #   uses: seanmiddleditch/gha-setup-ninja@v4
+      - name: Install Chocolatey packages
         if: ${{ matrix.msystem == 'MSVC' }}
-        uses: seanmiddleditch/gha-setup-ninja@v4
+        run: choco install cmake ninja
       - name: Setup MSVC
         if: ${{ matrix.msystem == 'MSVC' }}
         uses: ilammy/msvc-dev-cmd@v1
         with:
             arch: x64
-
 
       # - name: Setup environment variables
       #   run: |
