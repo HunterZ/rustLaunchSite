@@ -65,7 +65,7 @@ jobs:
           destination: "${{ github.workspace }}/ninja-build"
       - name: Setup Ninja
         if: ${{ matrix.msystem == 'NONE' }}
-        run: export PATH="${{ github.workspace }}/ninja-build:${PATH}"
+        run: echo "${{ github.workspace }}/ninja-build:${PATH}" >> $GITHUB_PATH
 
       # - name: Setup environment variables
       #   run: |
