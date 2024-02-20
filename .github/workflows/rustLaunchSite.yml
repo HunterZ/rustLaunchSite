@@ -64,6 +64,7 @@ jobs:
       #   with:
       #       arch: x64
       - name: Setup Chocolatey path
+        if: ${{ matrix.msystem == 'MSVC' }}
         run: |
           echo "%ChocolateyInstall%\bin" >> "%GITHUB_PATH%"";
           set PATH="%ChocolateyInstall%\bin:%PATH%";
@@ -120,11 +121,8 @@ jobs:
         run: cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Build project
         run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
-      - name: Setup CMake install stripping
-        if: ${{ matrix.buildtype != 'debug' }}
-        run: export RLS_STRIP="--strip"
       - name: Stage project
-        run: cmake --install ${RLS_STRIP} "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
       # Upload stuff
       - name: Package and upload project
