@@ -57,12 +57,16 @@ jobs:
         if: ${{ matrix.msystem == 'MINGW64' }}
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
-      # MSVC stuff
+      # Ninja/MSVC stuff
+      - name: Install Ninja
+        if: ${{ matrix.msystem == 'MSVC' }}
+        uses: seanmiddleditch/gha-setup-ninja@v4
       - name: Setup MSVC
         if: ${{ matrix.msystem == 'MSVC' }}
         uses: ilammy/msvc-dev-cmd@v1
         with:
             arch: x64
+
 
       # - name: Setup environment variables
       #   run: |
