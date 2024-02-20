@@ -66,8 +66,9 @@ jobs:
         run: choco install cmake ninja
       - name: Setup Chocolatey path
         run: |
-          echo "C:\ProgramData\chocolatey\bin" >> $GITHUB_PATH;
-          set PATH="C:\ProgramData\chocolatey\bin:%PATH%"
+          echo "%ChocolateyInstall%\bin" >> $GITHUB_PATH;
+          set PATH="%ChocolateyInstall%\bin:%PATH%";
+          echo "PATH=%PATH%"
       - name: Setup MSVC
         if: ${{ matrix.msystem == 'MSVC' }}
         uses: ilammy/msvc-dev-cmd@v1
@@ -82,7 +83,9 @@ jobs:
       #     export VCPKG_DEFAULT_HOST_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
       - name: Capture diagnostic info
-        run: set
+        run: |
+          echo "PATH=%PATH";
+          set
       #   run: |
       #     which cmake && cmake --version
       #     which git && git --version
