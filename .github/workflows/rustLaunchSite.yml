@@ -58,13 +58,14 @@ jobs:
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
       # MSVC+tools stuff
-      - name: Setup MSVC
-        if: ${{ matrix.msystem == 'MSVC' }}
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-            arch: x64
+      # - name: Setup MSVC
+      #   if: ${{ matrix.msystem == 'MSVC' }}
+      #   uses: ilammy/msvc-dev-cmd@v1
+      #   with:
+      #       arch: x64
       - name: Setup Chocolatey path
         run: |
+          echo "%ChocolateyInstall%\bin" >> "%GITHUB_PATH%"";
           set PATH="%ChocolateyInstall%\bin:%PATH%";
           echo "PATH=%PATH%"
       - name: Install Chocolatey packages
@@ -107,7 +108,6 @@ jobs:
       # - name: Dry-run vcpkg
       #   run: pushd vcpkg ; ./vcpkg install --dry-run ; popd
       - name: Setup vcpkg
-        id: vcpkg
         uses: johnwason/vcpkg-action@v6
         with:
           manifest-dir: "${{ github.workspace }}"
