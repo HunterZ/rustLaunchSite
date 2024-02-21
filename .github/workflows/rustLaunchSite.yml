@@ -58,20 +58,20 @@ jobs:
         run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
 
       # MSVC+tools stuff
-      # - name: Setup MSVC
-      #   if: ${{ matrix.msystem == 'MSVC' }}
-      #   uses: ilammy/msvc-dev-cmd@v1
-      #   with:
-      #       arch: x64
+      - name: Setup MSVC
+        if: ${{ matrix.msystem == 'MSVC' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+            arch: x64
       - name: Setup Chocolatey path
         if: ${{ matrix.msystem == 'MSVC' }}
         run: |
-          echo "%ChocolateyInstall%\bin" >> "%GITHUB_PATH%"";
-          set PATH="%ChocolateyInstall%\bin:%PATH%";
-          echo "PATH=%PATH%"
-      - name: Install Chocolatey packages
-        if: ${{ matrix.msystem == 'MSVC' }}
-        run: choco install cmake ninja
+          choco install cmake ninja
+          path
+          echo "%ChocolateyInstall%\bin" >> "%GITHUB_PATH%"
+          path
+          set PATH="%ChocolateyInstall%\bin;%PATH%"
+          path
       # - name: Setup Chocolatey path
       #   run: |
       #     echo "%ChocolateyInstall%\bin" >> $GITHUB_PATH;
@@ -87,7 +87,7 @@ jobs:
 
       - name: Capture diagnostic info
         run: |
-          echo "PATH=%PATH%";
+          echo "PATH=%PATH%"
           set
       #   run: |
       #     which cmake && cmake --version
