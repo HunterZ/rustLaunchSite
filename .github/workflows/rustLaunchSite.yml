@@ -22,24 +22,33 @@ jobs:
     strategy:
       matrix:
         include:
-          - {os: windows-latest, tripletbase: x64-mingw-static,   buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}"}
-          - {os: windows-latest, tripletbase: x64-windows-static, buildtype: minsizerel, msystem: MSVC,    shell: "cmd"}
+          - {os: windows-latest, tripletbase: x64-mingw-static,   buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}", scrext: "sh" }
+          - {os: windows-latest, tripletbase: x64-windows-static, buildtype: minsizerel, msystem: MSVC,    shell: "cmd",       scrext: "bat"}
 
     name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}
 
     env:
+      SETENV: "${{ github.workspace }}/.github/scripts/setup.${{ matrix.scrext }}"
       VCPKG_DEFAULT_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       VCPKG_DEFAULT_HOST_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
     defaults:
-      # use MSYS2 or Windows Command Prompt as the default shell
       run:
         shell: ${{ matrix.shell }}
 
     steps:
-      # MSYS/MinGW stuff
-      - name: Install MSYS2 ${{ matrix.msystem }}
+      - name: Setup MSVC Environment (1/2)
+        if: ${{ matrix.msystem == 'MSVC' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+            arch: x64
+      - name: Setup MSVC Environment (2/2)
+        if: ${{ matrix.msystem == 'MSVC' }}
+        run: |
+          choco install cmake git ninja
+
+      - name: Setup MSYS2 Environment (1/2)
         if: ${{ matrix.msystem != 'MSVC' }}
         uses: msys2/setup-msys2@v2
         with:
@@ -53,32 +62,16 @@ jobs:
             cmake:p
             ninja:p
             toolchain:p
-      - name: Setup MSYS2 ${{ matrix.msystem }}
-        if: ${{ matrix.msystem == 'MINGW64' }}
-        run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
-
-      # MSVC+tools stuff
-      - name: Setup MSVC
-        if: ${{ matrix.msystem == 'MSVC' }}
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-            arch: x64
-      - name: Install MSVC tools
-        if: ${{ matrix.msystem == 'MSVC' }}
+      - name: Setup MSYS2 Environment (2/2)
+        if: ${{ matrix.msystem != 'MSVC' }}
         run: |
-          choco install cmake git ninja
-          set PATH="%ChocolateyInstall%\bin;%PATH%"
-          path
+          git config --global core.autocrlf input
 
-      # Git stuff
-      - name: Setup git line endings
-        run: git config --global core.autocrlf input
       - name: Setup git workspace
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      # vcpkg stuff
       - name: Setup vcpkg
         uses: johnwason/vcpkg-action@v6
         with:
@@ -87,22 +80,19 @@ jobs:
           token: ${{ github.token }}
           github-binarycache: true
 
-      - name: Setup PATH
-        if: ${{ matrix.msystem == 'MSVC' }}
-        run: |
-          path
-          set PATH="%ChocolateyInstall%\bin;%PATH%"
-          path
-
-      # CMake stuff
       - name: Configure project
-        run: cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: |
+          ${{ env.SETENV }}
+          cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Build project
-        run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: |
+          ${{ env.SETENV }}
+          cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Stage project
-        run: cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: |
+          ${{ env.SETENV }}
+          cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
-      # Upload stuff
       - name: Package and upload project
         uses: actions/upload-artifact@v4
         with:
