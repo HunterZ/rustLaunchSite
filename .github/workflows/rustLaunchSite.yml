@@ -38,14 +38,6 @@ jobs:
         shell: ${{ matrix.shell }}
 
     steps:
-      # Git stuff
-      - name: Setup git line endings
-        run: git config --global core.autocrlf input
-      - name: Setup git workspace
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-
       # MSYS/MinGW stuff
       - name: Install MSYS2 ${{ matrix.msystem }}
         if: ${{ matrix.msystem != 'MSVC' }}
@@ -71,22 +63,20 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
             arch: x64
-      - name: Install CMake and Ninja
+      - name: Install MSVC tools
         if: ${{ matrix.msystem == 'MSVC' }}
         run: |
-          choco install cmake ninja
+          choco install cmake git ninja
           set PATH="%ChocolateyInstall%\bin;%PATH%"
           path
 
-      # - name: Capture diagnostic info
-      #   run: |
-      #     echo "PATH=%PATH%"
-      #     set
-      #   run: |
-      #     which cmake && cmake --version
-      #     which git && git --version
-      #     which gcc && gcc --version
-      #     set
+      # Git stuff
+      - name: Setup git line endings
+        run: git config --global core.autocrlf input
+      - name: Setup git workspace
+        uses: actions/checkout@v4
+        with:
+          submodules: true
 
       # vcpkg stuff
       - name: Setup vcpkg
