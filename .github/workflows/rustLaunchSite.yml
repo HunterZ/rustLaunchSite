@@ -69,6 +69,7 @@ jobs:
       - name: Setup MSYS2 Environment (2/2)
         id: set-env-msys
         if: ${{ matrix.msystem != 'MSVC' }}
+        shell: bash
         run: |
           git config --global core.autocrlf input
           echo "SCRIPT_PATH=${GITHUB_WORKSPACE}/.github/scripts/setenv.sh" >> "${GITHUB_OUTPUT}"
