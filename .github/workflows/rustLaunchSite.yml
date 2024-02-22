@@ -88,6 +88,7 @@ jobs:
           submodules: true
 
       - name: Setup vcpkg
+        id: vcpkg
         uses: johnwason/vcpkg-action@v6
         with:
           manifest-dir: "${{ github.workspace }}"
@@ -99,7 +100,8 @@ jobs:
         run: |
           ${{ steps.set-env-msvc.outputs.SCRIPT_PATH }}
           ${{ steps.set-env-msys.outputs.SCRIPT_PATH }}
-          cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+          cmake ${{ steps.vcpkg.outputs.vcpkg-cmake-config }} --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        # cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Build project
         run: |
           ${{ steps.set-env-msvc.outputs.SCRIPT_PATH }}
