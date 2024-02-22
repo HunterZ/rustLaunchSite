@@ -119,17 +119,16 @@ jobs:
           echo "ARGS=${{ steps.vcpkg-msvc.outputs.vcpkg-cmake-config }}${{ steps.vcpkg-msys.outputs.vcpkg-cmake-config }}" >> "${GITHUB_OUTPUT}"
 
       - name: Configure project
-        run: |
-          ${{ steps.set-env.outputs.SCRIPT_PATH }}
+        run: >-
+          ${{ steps.set-env.outputs.SCRIPT_PATH }} &&
           cmake ${{ steps.vcpkg.outputs.ARGS }} --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Build project
-        run: |
-          ${{ steps.set-env.outputs.SCRIPT_PATH }}
+        run: >-
+          ${{ steps.set-env.outputs.SCRIPT_PATH }} &&
           cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Stage project
-        run: |
-          ${{ steps.set-env.outputs.SCRIPT_PATH }}
-          cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: >-
+          ${{ steps.set-env.outputs.SCRIPT_PATH }} && cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
       - name: Package and upload project
         uses: actions/upload-artifact@v4
