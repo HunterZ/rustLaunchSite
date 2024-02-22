@@ -46,10 +46,6 @@ jobs:
         if: ${{ matrix.msystem == 'MSVC' }}
         run: |
           choco install cmake git ninja
-          chcp 65001
-        # echo "SCRIPT_PATH=%GITHUB_WORKSPACE%\.github\scripts\setenv.bat" >> "%GITHUB_OUTPUT%"
-        # echo "GITHUB_OUTPUT=%GITHUB_OUTPUT% - contents:"
-        # type "%GITHUB_OUTPUT%"
       - name: Setup MSVC Environment (3/3)
         id: set-env-msvc
         if: ${{ matrix.msystem == 'MSVC' }}
@@ -87,14 +83,34 @@ jobs:
         with:
           submodules: true
 
-      - name: Setup vcpkg
-        id: vcpkg
+      - name: Setup vcpkg (1/3)
+        id: vcpkg-init
         uses: johnwason/vcpkg-action@v6
         with:
           manifest-dir: "${{ github.workspace }}"
           triplet: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
           token: ${{ github.token }}
           github-binarycache: true
+      - name: Setup vcpkg (2/4)
+        id: vcpkg-msvc
+        if: ${{ matrix.msystem == 'MSVC' }}
+        shell: bash
+        run: |
+          echo "${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
+          echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
+          cat "${GITHUB_OUTPUT}"
+      - name: Setup vcpkg (3/4)
+        id: vcpkg-msys
+        if: ${{ matrix.msystem != 'MSVC' }}
+        run: |
+          echo "${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
+          echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
+          cat "${GITHUB_OUTPUT}"
+      - name: Setup vcpkg (4/4)
+        id: vcpkg
+        shell: bash
+        run:
+          echo "${{ steps.vcpkg-msvc.outputs.vcpkg-cmake-config }}${{ steps.vcpkg-msys.outputs.vcpkg-cmake-config }}" >> "${GITHUB_OUTPUT}"
 
       - name: Configure project
         run: |
