@@ -44,8 +44,7 @@ jobs:
             arch: x64
       - name: Setup MSVC environment (2/3)
         if: ${{ matrix.msystem == 'MSVC' }}
-        run:
-          choco install cmake git ninja
+        run: choco install cmake git ninja
       - name: Setup MSVC environment (3/3)
         id: set-env-msvc
         if: ${{ matrix.msystem == 'MSVC' }}
@@ -81,9 +80,7 @@ jobs:
       - name: Setup common environment
         id: set-env
         shell: bash
-        run:
-          echo "${{ steps.set-env-msvc.outputs.SCRIPT_PATH }}${{ steps.set-env-msys.outputs.SCRIPT_PATH }}" >> "${GITHUB_OUTPUT}"
-
+        run: echo "${{ steps.set-env-msvc.outputs.SCRIPT_PATH }}${{ steps.set-env-msys.outputs.SCRIPT_PATH }}" >> "${GITHUB_OUTPUT}"
 
       - name: Setup git workspace
         uses: actions/checkout@v4
@@ -116,8 +113,7 @@ jobs:
       - name: Consolidate vcpkg outputs
         id: vcpkg
         shell: bash
-        run:
-          echo "${{ steps.vcpkg-msvc.outputs.vcpkg-cmake-config }}${{ steps.vcpkg-msys.outputs.vcpkg-cmake-config }}" >> "${GITHUB_OUTPUT}"
+        run: echo "${{ steps.vcpkg-msvc.outputs.vcpkg-cmake-config }}${{ steps.vcpkg-msys.outputs.vcpkg-cmake-config }}" >> "${GITHUB_OUTPUT}"
 
       - name: Configure project
         run: |
