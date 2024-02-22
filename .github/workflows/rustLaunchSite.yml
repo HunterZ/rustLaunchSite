@@ -102,21 +102,21 @@ jobs:
         if: ${{ matrix.msystem == 'MSVC' }}
         shell: bash
         run: |
-          echo "${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
+          echo "ARGS=${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
           echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
           cat "${GITHUB_OUTPUT}"
       - name: Scrub vcpkg output (MSYS)
         id: vcpkg-msys
         if: ${{ matrix.msystem != 'MSVC' }}
         run: |
-          echo "${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
+          echo "ARGS=${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
           echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
           cat "${GITHUB_OUTPUT}"
       - name: Consolidate vcpkg outputs
         id: vcpkg
         shell: bash
         run: |
-          echo "ARGS=${{ steps.vcpkg-msvc.outputs.vcpkg-cmake-config }}${{ steps.vcpkg-msys.outputs.vcpkg-cmake-config }}" >> "${GITHUB_OUTPUT}"
+          echo "ARGS=${{ steps.vcpkg-msvc.outputs.ARGS }}${{ steps.vcpkg-msys.outputs.ARGS }}" >> "${GITHUB_OUTPUT}"
 
       - name: Configure project
         run: >-
@@ -128,7 +128,8 @@ jobs:
           cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Stage project
         run: >-
-          ${{ steps.set-env.outputs.SCRIPT_PATH }} && cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+          ${{ steps.set-env.outputs.SCRIPT_PATH }} &&
+          cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
       - name: Package and upload project
         uses: actions/upload-artifact@v4
