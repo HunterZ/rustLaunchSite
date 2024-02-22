@@ -37,27 +37,27 @@ jobs:
         shell: ${{ matrix.shell }}
 
     steps:
-      - name: Setup MSVC Environment (1/2)
+      - name: Setup MSVC Environment (1/3)
         if: ${{ matrix.msystem == 'MSVC' }}
         uses: ilammy/msvc-dev-cmd@v1
         with:
             arch: x64
-      - name: Setup MSVC Environment (2/2)
-        id: set-env-msvc
+      - name: Setup MSVC Environment (2/3)
         if: ${{ matrix.msystem == 'MSVC' }}
         run: |
           choco install cmake git ninja
           chcp 65001
-          echo "SCRIPT_PATH=%GITHUB_WORKSPACE%\.github\scripts\setenv.bat" >> "%GITHUB_OUTPUT%"
-          echo "GITHUB_OUTPUT=%GITHUB_OUTPUT% - contents:"
-          type "%GITHUB_OUTPUT%"
-      # - name: Setup MSVC Environment (3/3)
-      #   if: ${{ matrix.msystem == 'MSVC' }}
-      #   shell: bash
-      #   run: |
-      #     echo "SCRIPT_PATH=${GITHUB_WORKSPACE}\.github\scripts\setenv.bat" >> "${GITHUB_OUTPUT}"
-      #     echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
-      #     cat "${GITHUB_OUTPUT}"
+        # echo "SCRIPT_PATH=%GITHUB_WORKSPACE%\.github\scripts\setenv.bat" >> "%GITHUB_OUTPUT%"
+        # echo "GITHUB_OUTPUT=%GITHUB_OUTPUT% - contents:"
+        # type "%GITHUB_OUTPUT%"
+      - name: Setup MSVC Environment (3/3)
+        id: set-env-msvc
+        if: ${{ matrix.msystem == 'MSVC' }}
+        shell: bash
+        run: |
+          echo "SCRIPT_PATH=${GITHUB_WORKSPACE}/.github/scripts/setenv.bat" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
+          echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
+          cat "${GITHUB_OUTPUT}"
 
       - name: Setup MSYS2 Environment (1/2)
         if: ${{ matrix.msystem != 'MSVC' }}
