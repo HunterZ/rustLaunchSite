@@ -22,8 +22,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - {os: windows-latest, tripletbase: x64-mingw-static,   buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}", scrext: "sh" }
-          - {os: windows-latest, tripletbase: x64-windows-static, buildtype: minsizerel, msystem: MSVC,    shell: "cmd",       scrext: "bat"}
+          - {os: windows-latest, tripletbase: x64-mingw-static,   buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}"}
+          - {os: windows-latest, tripletbase: x64-windows-static, buildtype: minsizerel, msystem: MSVC,    shell: "cmd"      }
 
     name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}
@@ -44,9 +44,11 @@ jobs:
         with:
             arch: x64
       - name: Setup MSVC Environment (2/2)
+        id: set-env-msvc
         if: ${{ matrix.msystem == 'MSVC' }}
         run: |
           choco install cmake git ninja
+          echo "SCRIPT_PATH=%GITHUB_WORKSPACE%\.github\scripts\setenv.bat" >> "%GITHUB_OUTPUT%"
 
       - name: Setup MSYS2 Environment (1/2)
         if: ${{ matrix.msystem != 'MSVC' }}
@@ -63,9 +65,16 @@ jobs:
             ninja:p
             toolchain:p
       - name: Setup MSYS2 Environment (2/2)
+        id: set-env-msys
         if: ${{ matrix.msystem != 'MSVC' }}
         run: |
           git config --global core.autocrlf input
+          echo "SCRIPT_PATH=${GITHUB_WORKSPACE}/.github/scripts/setenv.sh" >> "${GITHUB_OUTPUT}"
+
+      - name: Setup common environment
+        id: set-env
+        run: |
+          echo "${{ steps.set-env-msvc.outputs.SCRIPT_PATH }}${{ steps.set-env-msys.outputs.SCRIPT_PATH }}" >> "${GITHUB_OUTPUT}"
 
       - name: Setup git workspace
         uses: actions/checkout@v4
@@ -82,15 +91,15 @@ jobs:
 
       - name: Configure project
         run: |
-          ${{ env.SETENV }}
+          ${{ steps.set-env.outputs.SCRIPT_PATH }}
           cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Build project
         run: |
-          ${{ env.SETENV }}
+          ${{ steps.set-env.outputs.SCRIPT_PATH }}
           cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Stage project
         run: |
-          ${{ env.SETENV }}
+          ${{ steps.set-env.outputs.SCRIPT_PATH }}
           cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
       - name: Package and upload project
