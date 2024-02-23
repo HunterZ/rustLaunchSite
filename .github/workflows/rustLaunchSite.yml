@@ -55,7 +55,7 @@ jobs:
         if: ${{ matrix.msystem == 'MSVC' }}
         shell: bash
         run: |
-          export FIX_PATH="sed 's|/|\\|g'"
+          export FIX_PATH='sed s|/|\\|g'
           echo "FIX_PATH=${FIX_PATH}" >> "${GITHUB_ENV}"
           export SCRIPT_EXT=".bat"
           echo "SCRIPT_EXT=${SCRIPT_EXT}" >> "${GITHUB_ENV}"
@@ -76,7 +76,7 @@ jobs:
         shell: bash
         run: |
           git config --global core.autocrlf input
-          export FIX_PATH="sed 's|\\|/|g'"
+          export FIX_PATH='sed s|\\|/|g'
           echo "FIX_PATH=${FIX_PATH}" >> "${GITHUB_ENV}"
           export SCRIPT_EXT=".sh"
           echo "SCRIPT_EXT=${SCRIPT_EXT}" >> "${GITHUB_ENV}"
