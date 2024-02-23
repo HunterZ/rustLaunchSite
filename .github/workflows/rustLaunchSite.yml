@@ -68,10 +68,6 @@ jobs:
         with:
           msystem: ${{ matrix.msystem }}
           update: true
-          install: >-
-            curl
-            git
-            make
           pacboy: >-
             cmake:p
             ninja:p
@@ -79,6 +75,7 @@ jobs:
       - name: Setup MSYS2 environment (2/2)
         id: set-env-msys
         if: ${{ matrix.msystem != 'MSVC' }}
+        shell: bash
         run: |
           git config --global core.autocrlf input
           echo "SETENV_PATH=${GITHUB_WORKSPACE}/.github/scripts/setenv.sh" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
