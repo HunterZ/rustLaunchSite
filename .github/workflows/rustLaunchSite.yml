@@ -49,17 +49,18 @@ jobs:
       - name: Setup MSVC environment (2/3)
         if: ${{ matrix.msystem == 'MSVC' }}
         run: |
-          choco install cmake git ninja
+          choco install cmake ninja
       - name: Setup MSVC environment (3/3)
         id: set-env-msvc
         if: ${{ matrix.msystem == 'MSVC' }}
         shell: bash
         run: |
           echo "SETENV_PATH=${GITHUB_WORKSPACE}/.github/scripts/setenv.bat" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
-          echo "VCPKG_BOOT=${GITHUB_WORKSPACE}/vcpkg/bootstrap-vcpkg.bat" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
-          echo "VCPKG_PATH=${GITHUB_WORKSPACE}/vcpkg" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
           echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
           cat "${GITHUB_OUTPUT}"
+
+        # echo "VCPKG_BOOT=${GITHUB_WORKSPACE}/vcpkg/bootstrap-vcpkg.bat" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
+        # echo "VCPKG_PATH=${GITHUB_WORKSPACE}/vcpkg" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
 
       - name: Setup MSYS2 environment (1/2)
         if: ${{ matrix.msystem != 'MSVC' }}
@@ -81,72 +82,74 @@ jobs:
         run: |
           git config --global core.autocrlf input
           echo "SETENV_PATH=${GITHUB_WORKSPACE}/.github/scripts/setenv.sh" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
-          echo "VCPKG_BOOT=${GITHUB_WORKSPACE}/vcpkg/bootstrap-vcpkg.sh" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
-          echo "VCPKG_PATH=${GITHUB_WORKSPACE}/vcpkg" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
           echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
           cat "${GITHUB_OUTPUT}"
+
+        # echo "VCPKG_BOOT=${GITHUB_WORKSPACE}/vcpkg/bootstrap-vcpkg.sh" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
+        # echo "VCPKG_PATH=${GITHUB_WORKSPACE}/vcpkg" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
 
       - name: Setup common environment
         id: set-env
         shell: bash
         run: |
           echo "SETENV_PATH=${{ steps.set-env-msvc.outputs.SETENV_PATH }}${{ steps.set-env-msys.outputs.SETENV_PATH }}" >> "${GITHUB_OUTPUT}"
-          echo "VCPKG_BOOT=${{ steps.set-env-msvc.outputs.VCPKG_BOOT }}${{ steps.set-env-msys.outputs.VCPKG_BOOT }}" >> "${GITHUB_OUTPUT}"
-          echo "VCPKG_PATH=${{ steps.set-env-msvc.outputs.VCPKG_PATH }}${{ steps.set-env-msys.outputs.VCPKG_PATH }}" >> "${GITHUB_OUTPUT}"
+
+        # echo "VCPKG_BOOT=${{ steps.set-env-msvc.outputs.VCPKG_BOOT }}${{ steps.set-env-msys.outputs.VCPKG_BOOT }}" >> "${GITHUB_OUTPUT}"
+        # echo "VCPKG_PATH=${{ steps.set-env-msvc.outputs.VCPKG_PATH }}${{ steps.set-env-msys.outputs.VCPKG_PATH }}" >> "${GITHUB_OUTPUT}"
 
       - name: Setup git workspace
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      # - name: Setup vcpkg
-      #   id: vcpkg-init
-      #   uses: johnwason/vcpkg-action@v6
-      #   with:
-      #     manifest-dir: "${{ github.workspace }}"
-      #     triplet: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
-      #     token: ${{ github.token }}
-      #     github-binarycache: true
-      # - name: Scrub vcpkg output (MSVC)
-      #   id: vcpkg-msvc
-      #   if: ${{ matrix.msystem == 'MSVC' }}
-      #   shell: bash
-      #   run: |
-      #     echo "ARGS=${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
-      #     echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
-      #     cat "${GITHUB_OUTPUT}"
-      # - name: Scrub vcpkg output (MSYS)
-      #   id: vcpkg-msys
-      #   if: ${{ matrix.msystem != 'MSVC' }}
-      #   run: |
-      #     echo "ARGS=${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
-      #     echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
-      #     cat "${GITHUB_OUTPUT}"
-      # - name: Consolidate vcpkg outputs
-      #   id: vcpkg
-      #   shell: bash
-      #   run: |
-      #     echo "ARGS=${{ steps.vcpkg-msvc.outputs.ARGS }}${{ steps.vcpkg-msys.outputs.ARGS }}" >> "${GITHUB_OUTPUT}"
-
-      - name: Install vcpkg
-        uses: actions/checkout@v4
+      - name: Setup vcpkg
+        id: vcpkg-init
+        uses: johnwason/vcpkg-action@v6
         with:
-          repository: Microsoft/vcpkg
-          path: vcpkg
-          fetch-depth: 1
-          show-progress: true
-          lfs: false
-      - name: Bootstrap vcpkg
-        run: >-
-          ${{ steps.set-env.outputs.SETENV_PATH }} &&
-          pushd ${{ steps.set-env.outputs.VCPKG_PATH }} &&
-          ${{ steps.set-env.outputs.VCPKG_BOOT }} -disableMetrics &&
-          popd
+          manifest-dir: "${{ github.workspace }}"
+          triplet: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+          token: ${{ github.token }}
+          github-binarycache: true
+      - name: Scrub vcpkg output (MSVC)
+        id: vcpkg-msvc
+        if: ${{ matrix.msystem == 'MSVC' }}
+        shell: bash
+        run: |
+          echo "ARGS=${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|/|\\|g' >> "${GITHUB_OUTPUT}"
+          echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
+          cat "${GITHUB_OUTPUT}"
+      - name: Scrub vcpkg output (MSYS)
+        id: vcpkg-msys
+        if: ${{ matrix.msystem != 'MSVC' }}
+        run: |
+          echo "ARGS=${{ steps.vcpkg-init.outputs.vcpkg-cmake-config }}" | sed 's|\\|/|g' >> "${GITHUB_OUTPUT}"
+          echo "GITHUB_OUTPUT=${GITHUB_OUTPUT} - contents:"
+          cat "${GITHUB_OUTPUT}"
+      - name: Consolidate vcpkg outputs
+        id: vcpkg
+        shell: bash
+        run: |
+          echo "ARGS=${{ steps.vcpkg-msvc.outputs.ARGS }}${{ steps.vcpkg-msys.outputs.ARGS }}" >> "${GITHUB_OUTPUT}"
+
+      # - name: Install vcpkg
+      #   uses: actions/checkout@v4
+      #   with:
+      #     repository: Microsoft/vcpkg
+      #     path: vcpkg
+      #     fetch-depth: 1
+      #     show-progress: true
+      #     lfs: false
+      # - name: Bootstrap vcpkg
+      #   run: >-
+      #     ${{ steps.set-env.outputs.SETENV_PATH }} &&
+      #     pushd ${{ steps.set-env.outputs.VCPKG_PATH }} &&
+      #     ${{ steps.set-env.outputs.VCPKG_BOOT }} -disableMetrics &&
+      #     popd
 
       - name: Configure project
         run: >-
           ${{ steps.set-env.outputs.SETENV_PATH }} &&
-          cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+          cmake ${{ steps.vcpkg.outputs.ARGS }} --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
       - name: Build project
         run: >-
           ${{ steps.set-env.outputs.SETENV_PATH }} &&
