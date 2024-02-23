@@ -4,38 +4,46 @@
     {
       "name": "common",
       "hidden": true,
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "VCPKG_HOST_TRIPLET": "${presetName}",
+        "VCPKG_TARGET_TRIPLET": "${presetName}"
+      }
     },
     {
       "name": "build-type-debug",
       "hidden": true,
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDebug"
       }
     },
     {
       "name": "build-type-release",
       "hidden": true,
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded"
       }
     },
     {
       "name": "build-type-minsizerel",
       "hidden": true,
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "MinSizeRel"
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded"
       }
     },
     {
       "name": "x64-mingw-static-debug",
       "description": "MinGW64 Debug w/static linkage",
-      "cacheVariables": {
-        "VCPKG_HOST_TRIPLET": "${presetName}",
-        "VCPKG_TARGET_TRIPLET": "${presetName}"
-      },
       "inherits": [
         "common",
         "build-type-debug"
@@ -44,10 +52,6 @@
     {
       "name": "x64-mingw-static-minsizerel",
       "description": "MinGW64 MinSizeRel w/static linkage",
-      "cacheVariables": {
-        "VCPKG_HOST_TRIPLET": "${presetName}",
-        "VCPKG_TARGET_TRIPLET": "${presetName}"
-      },
       "inherits": [
         "common",
         "build-type-minsizerel"
@@ -56,10 +60,30 @@
     {
       "name": "x64-mingw-static-release",
       "description": "MinGW64 Release w/static linkage",
-      "cacheVariables": {
-        "VCPKG_HOST_TRIPLET": "${presetName}",
-        "VCPKG_TARGET_TRIPLET": "${presetName}"
-      },
+      "inherits": [
+        "common",
+        "build-type-release"
+      ]
+    },
+    {
+      "name": "x64-windows-static-debug",
+      "description": "MSVC Debug w/static linkage",
+      "inherits": [
+        "common",
+        "build-type-debug"
+      ]
+    },
+    {
+      "name": "x64-windows-static-minsizerel",
+      "description": "MSVC MinSizeRel w/static linkage",
+      "inherits": [
+        "common",
+        "build-type-minsizerel"
+      ]
+    },
+    {
+      "name": "x64-windows-static-release",
+      "description": "MSVC Release w/static linkage",
       "inherits": [
         "common",
         "build-type-release"

@@ -3,6 +3,11 @@
 #include "Config.h"
 #include "Rcon.h"
 
+#if _MSC_VER
+  // make Boost happy when building with MSVC
+  #include <SDKDDKVer.h>
+#endif
+
 // #include <boost/winapi/show_window.hpp>
 #include <boost/process.hpp>
 #include <boost/process/extend.hpp>

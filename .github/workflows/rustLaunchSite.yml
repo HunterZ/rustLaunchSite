@@ -10,27 +10,21 @@ on:
 permissions:
   contents: write
 
+# env vars common to all jobs
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # VCPKG_FEATURE_FLAGS: dependencygraph
-  VCPKG_DISABLE_METRICS: 1
-  VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
+  VCPKG_DISABLE_METRICS: true
+  # VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
 
 jobs:
   build:
     strategy:
       matrix:
-        # only Windows for now
-        os: [ windows-latest ]
-        # only MinSizeRel for now
-        buildtype: [ minsizerel ]
         include:
-          # unique set of triplet base(s) for each OS
-          # NOTES:
-          # - at least one triplet base must be defined per OS
-          # - tripletbase is matrixed with buildtype to form triplets
-          - os: windows-latest
-            tripletbase: x64-mingw-static
+          - {os: windows-latest, tripletbase: x64-mingw-static,   buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}"}
+          - {os: windows-latest, tripletbase: x64-windows-static, buildtype: minsizerel, msystem: MSVC,    shell: "cmd"      }
 
     name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}
@@ -40,78 +34,104 @@ jobs:
       VCPKG_DEFAULT_HOST_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
 
     defaults:
-      # use MSYS2 bash as the default shell
       run:
-        shell: msys2 {0}
+        shell: ${{ matrix.shell }}
 
     steps:
-      # MSYS/MinGW stuff
-      - name: Setup MSYS2
+      - name: Setup MSVC environment (1/3)
+        if: ${{ matrix.msystem == 'MSVC' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          sdk: "10.0.22621.0"
+          toolset: "14.39.33519"
+          uwp: false
+          vsversion: "17.0"
+      - name: Setup MSVC environment (2/3)
+        if: ${{ matrix.msystem == 'MSVC' }}
+        run: |
+          choco install cmake ninja
+      - name: Setup MSVC environment (3/3)
+        if: ${{ matrix.msystem == 'MSVC' }}
+        shell: bash
+        run: |
+          export FIX_PATH='sed s|/|\\|g'
+          echo "FIX_PATH=${FIX_PATH}" >> "${GITHUB_ENV}"
+          export SCRIPT_EXT=".bat"
+          echo "SCRIPT_EXT=${SCRIPT_EXT}" >> "${GITHUB_ENV}"
+
+      - name: Setup MSYS2 environment (1/2)
+        if: ${{ matrix.msystem != 'MSVC' }}
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: ${{ matrix.msystem }}
           update: true
-          install: >-
-            curl
-            git
-            make
+          release: false
           pacboy: >-
             cmake:p
             ninja:p
             toolchain:p
-      - name: Setup MinGW64
-        run: export PATH="${RUNNER_TEMP}/msys64/mingw64/bin:${PATH}"
+      - name: Setup MSYS2 environment (2/2)
+        if: ${{ matrix.msystem != 'MSVC' }}
+        shell: bash
+        run: |
+          git config --global core.autocrlf input
+          export FIX_PATH='sed s|\\|/|g'
+          echo "FIX_PATH=${FIX_PATH}" >> "${GITHUB_ENV}"
+          export SCRIPT_EXT=".sh"
+          echo "SCRIPT_EXT=${SCRIPT_EXT}" >> "${GITHUB_ENV}"
 
-      # - name: Setup environment variables
-      #   run: |
-      #     export GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-      #     export VCPKG_FEATURE_FLAGS=dependencygraph
-      #     export VCPKG_DEFAULT_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
-      #     export VCPKG_DEFAULT_HOST_TRIPLET="${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      - name: Setup common environment
+        shell: bash
+        run: |
+          export SETENV_PATH="${GITHUB_WORKSPACE}/.github/scripts/setenv${SCRIPT_EXT}"
+          echo "SETENV_PATH=${SETENV_PATH}" | ${FIX_PATH} >> "${GITHUB_ENV}"
+          export VCPKG_ROOT="${GITHUB_WORKSPACE}/vcpkg"
+          echo "VCPKG_ROOT=${VCPKG_ROOT}" | ${FIX_PATH} >> "${GITHUB_ENV}"
+          export VCPKG_BOOT="./bootstrap-vcpkg${SCRIPT_EXT}"
+          echo "VCPKG_BOOT=${VCPKG_BOOT}" | ${FIX_PATH} >> "${GITHUB_ENV}"
 
-      # - name: Capture diagnostic info
-      #   run: |
-      #     which cmake && cmake --version
-      #     which git && git --version
-      #     which gcc && gcc --version
-      #     set
-
-      # Git stuff
-      - name: Setup git line endings
-        run: git config --global core.autocrlf input
       - name: Setup git workspace
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      # vcpkg stuff
-      # - name: Bootstrap vcpkg
-      #   run: pushd vcpkg ; ./bootstrap-vcpkg.sh ; popd
-      # - name: Dry-run vcpkg
-      #   run: pushd vcpkg ; ./vcpkg install --dry-run ; popd
-
-      - name: Setup vcpkg
-        id: vcpkg
-        uses: johnwason/vcpkg-action@v6
+      - name: Setup vcpkg (1/3)
+        uses: actions/checkout@v4
         with:
-          manifest-dir: "${{ github.workspace }}"
-          triplet: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
-          # default cache key is already OS + final triplet!
-          # cache-key: ${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}
-          token: ${{ github.token }}
-          github-binarycache: true
+          repository: Microsoft/vcpkg
+          path: vcpkg
+          fetch-depth: 1
+          show-progress: true
+          lfs: false
+      - name: Setup vcpkg (2/3)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Setup vcpkg (3/3)
+        run: >-
+          ${{ env.SETENV_PATH }} &&
+          pushd ${{ env.VCPKG_ROOT }} &&
+          ${{ env.VCPKG_BOOT }} -disableMetrics &&
+          popd
 
-      # CMake stuff
       - name: Configure project
-        run: cmake --preset "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: >-
+          ${{ env.SETENV_PATH }} &&
+          cmake --preset "${{ env.VCPKG_DEFAULT_TRIPLET }}"
       - name: Build project
-        run: cmake --build "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: >-
+          ${{ env.SETENV_PATH }} &&
+          cmake --build "${{ github.workspace }}/out/build/${{ env.VCPKG_DEFAULT_TRIPLET }}"
       - name: Stage project
-        run: cmake --install "${{ github.workspace }}/out/build/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+        run: >-
+          ${{ env.SETENV_PATH }} &&
+          cmake --install "${{ github.workspace }}/out/build/${{ env.VCPKG_DEFAULT_TRIPLET }}"
 
-      # Upload stuff
       - name: Package and upload project
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
-          path: "${{ github.workspace }}/out/install/${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+          name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}"
+          path: "${{ github.workspace }}/out/install/${{ env.VCPKG_DEFAULT_TRIPLET }}"

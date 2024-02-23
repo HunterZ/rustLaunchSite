@@ -18,26 +18,15 @@ project(rustLaunchSite
   VERSION 0.0.1
 )
 
-# follow vcpkg's lead on dynamic versus static linkage
-set(RLS_LIBS
-  Boost::boost
-  Boost::filesystem
-  ctrl-c
-  CURL::libcurl
-  ixwebsocket::ixwebsocket
-  kubazip::kubazip
-  libconfig::config++
-  libconfig::config
-  nlohmann_json::nlohmann_json
-)
-
 # strip release build binaries
 # yes, this is GCC-specific; use MinGW on Windows!
-set(RLS_LINK_OPTS
-  "$<$<CONFIG:MinSizeRel>:-s>"
-  "$<$<CONFIG:Release>:-s>"
+# set(RLS_LINK_OPTS
+#   "$<$<CONFIG:MinSizeRel>:-s>"
+#   "$<$<CONFIG:Release>:-s>"
   # -Wl,-subsystem,windows
-)
+# )
+# NOTE: this is now done during cmake install or cpack
+
 set(BOOST_USE_DEBUG_LIBS
   $<$<CONFIG:Debug>:ON>
   $<$<CONFIG:MinSizeRel>:OFF>
@@ -51,7 +40,7 @@ set(BOOST_USE_RELEASE_LIBS
 if(VCPKG_TARGET_TRIPLET MATCHES ".*static.*")
   message("RLS: Configuring for static linking")
   set(RLS_COPY_DEPS OFF)
-  set(RLS_LINK_OPTS "${RLS_LINK_OPTS}" "-static") # "-static-libgcc" "-static-libstdc++" "-static")
+  set(RLS_LINK_OPTS "${RLS_LINK_OPTS}" "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-static>") # "-static-libgcc" "-static-libstdc++" "-static")
   set(Boost_USE_STATIC_LIBS ON)
   set(Boost_USE_STATIC_RUNTIME ON)
 else()
@@ -64,13 +53,39 @@ endif()
 # use config mode to prefer vcpkg versions
 #  ...except for Boost, because vcpkg uses special goop to work with FindBoost
 # set(Boost_NO_BOOST_CMAKE ON)
-# set(Boost_NO_WARN_NEW_VERSIONS ON)
+set(Boost_NO_WARN_NEW_VERSIONS ON)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(kubazip CONFIG REQUIRED)
 find_package(libconfig CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+
+# vcpkg libconfig provides inconsistently named targets
+set(LIBCONFIG_CPP_TARGET "${LIBCONFIG_CPP_TARGET}")
+foreach(RLS_LCPPT "${LIBCONFIG_CPP_TARGET}" "libconfig::config++" "libconfig::libconfig++" "libconfig++" "config++")
+  if(TARGET "${RLS_LCPPT}")
+    set(LIBCONFIG_CPP_TARGET "${RLS_LCPPT}")
+    break()
+  endif()
+endforeach()
+if(TARGET "${LIBCONFIG_CPP_TARGET}")
+  message("RLS: Found libconfig++ target name: ${LIBCONFIG_CPP_TARGET}")
+else()
+  message(ERROR "RLS: Failed to determine libconfig++ target name")
+endif()
+set(LIBCONFIG_C_TARGET "${LIBCONFIG_C_TARGET}")
+foreach(RLS_LCT "${LIBCONFIG_C_TARGET}" "libconfig::config" "libconfig::libconfig" "libconfig" "config")
+  if(TARGET "${RLS_LCT}")
+    set(LIBCONFIG_C_TARGET "${RLS_LCT}")
+    break()
+  endif()
+endforeach()
+if(TARGET "${LIBCONFIG_C_TARGET}")
+  message("RLS: Found libconfig target name: ${LIBCONFIG_C_TARGET}")
+else()
+  message(ERROR "RLS: Failed to determine libconfig target name")
+endif()
 
 # build ctrl-c library (as static for simplicity)
 add_library(ctrl-c STATIC
@@ -93,12 +108,30 @@ add_executable(${PROJECT_NAME}
   Updater.cpp
   Updater.h
 )
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 target_compile_options(${PROJECT_NAME} PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
   $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE ${RLS_LIBS})
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  Boost::boost
+  Boost::filesystem
+  ctrl-c
+  CURL::libcurl
+  ixwebsocket::ixwebsocket
+  kubazip::kubazip
+  "${LIBCONFIG_CPP_TARGET}"
+  "${LIBCONFIG_C_TARGET}"
+  nlohmann_json::nlohmann_json
+)
 target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
+
+add_custom_command(TARGET ${PROJECT_NAME}
+  POST_BUILD
+  DEPENDS ${PROJECT_NAME}
+  COMMAND "$<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:${CMAKE_STRIP}>"
+    ARGS "--strip-all" "$<TARGET_FILE:${PROJECT_NAME}>"
+)
 
 # add_executable(downloaderTest
 #   Downloader.cpp
@@ -129,6 +162,7 @@ target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 # target_link_options(updaterTest PRIVATE "${RLS_LINK_OPTS}")
 
 include(GNUInstallDirs)
+# include(InstallRequiredSystemLibraries)
 
 # install(CODE [[
 #   file(GET_RUNTIME_DEPENDENCIES
