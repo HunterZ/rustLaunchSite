@@ -6,3 +6,4 @@ echo "Updated path: ${PATH}"
 
 # echo "Setup vcpkg root"
 # export VCPKG_ROOT="${GITHUB_WORKSPACE}/vcpkg"
+# echo "VCPKG_ROOT=${VCPKG_ROOT}"
