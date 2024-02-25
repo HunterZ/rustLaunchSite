@@ -46,7 +46,7 @@ jobs:
       run:
         shell: "\
           ${{ matrix.triplet == 'x64-mingw-static' && 'msys2 {0}' || '' }}\
-          ${{ matrix.triplet == 'x64-windows-static' && 'cmd {0}' || '' }}"
+          ${{ matrix.triplet == 'x64-windows-static' && 'cmd' || '' }}"
 
     steps:
       - name: Setup MSVC environment (1/2)
