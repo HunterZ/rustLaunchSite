@@ -31,8 +31,8 @@ jobs:
 
     env:
       FIX_PATH: "\
-        ${{ matrix.triplet == 'x64-mingw-static' && 'sed s|\\|/|g' || '' }}\
-        ${{ matrix.triplet == 'x64-windows-static' && 'sed s|/|\\|g' || '' }}"
+        ${{ matrix.triplet == 'x64-mingw-static' && 'sed s|\\\\|/|g' || '' }}\
+        ${{ matrix.triplet == 'x64-windows-static' && 'sed s|/|\\\\|g' || '' }}"
       MSYSTEM: "\
         ${{ matrix.triplet == 'x64-mingw-static' && 'MINGW64' || '' }}\
         ${{ matrix.triplet == 'x64-windows-static' && 'MSVC' || '' }}"
