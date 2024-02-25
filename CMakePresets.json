@@ -2,9 +2,9 @@
   "version": 6,
   "configurePresets": [
     {
-      "name": "common",
+      "name": "ninja-multi-vcpkg",
       "hidden": true,
-      "generator": "Ninja",
+      "generator": "Ninja Multi-Config",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -18,75 +18,70 @@
       }
     },
     {
-      "name": "build-type-debug",
+      "name": "static",
       "hidden": true,
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDebug"
+        "RLS_STATIC": "ON"
       }
     },
     {
-      "name": "build-type-release",
-      "hidden": true,
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded"
-      }
-    },
-    {
-      "name": "build-type-minsizerel",
-      "hidden": true,
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "MinSizeRel",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded"
-      }
-    },
-    {
-      "name": "x64-mingw-static-debug",
-      "description": "MinGW64 Debug w/static linkage",
+      "name": "x64-mingw-static",
+      "description": "MinGW64 w/static linkage",
       "inherits": [
-        "common",
-        "build-type-debug"
+        "ninja-multi-vcpkg",
+        "static"
       ]
     },
     {
-      "name": "x64-mingw-static-minsizerel",
-      "description": "MinGW64 MinSizeRel w/static linkage",
+      "name": "x64-windows-static",
+      "description": "MSVC w/static linkage",
       "inherits": [
-        "common",
-        "build-type-minsizerel"
+        "ninja-multi-vcpkg",
+        "static"
+      ]
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "Debug",
+      "hidden": true,
+      "configuration": "Debug"
+    },
+    {
+      "name": "Release",
+      "hidden": true,
+      "configuration": "Release"
+    },
+    {
+      "name": "x64-mingw-static-debug",
+      "configurePreset": "x64-mingw-static",
+      "description": "MinGW64 Debug w/static linkage",
+      "inherits": [
+        "Debug"
       ]
     },
     {
       "name": "x64-mingw-static-release",
+      "configurePreset": "x64-mingw-static",
       "description": "MinGW64 Release w/static linkage",
       "inherits": [
-        "common",
-        "build-type-release"
+        "Release"
       ]
     },
     {
       "name": "x64-windows-static-debug",
+      "configurePreset": "x64-windows-static",
       "description": "MSVC Debug w/static linkage",
       "inherits": [
-        "common",
-        "build-type-debug"
-      ]
-    },
-    {
-      "name": "x64-windows-static-minsizerel",
-      "description": "MSVC MinSizeRel w/static linkage",
-      "inherits": [
-        "common",
-        "build-type-minsizerel"
+        "Debug"
       ]
     },
     {
       "name": "x64-windows-static-release",
+      "configurePreset": "x64-windows-static",
       "description": "MSVC Release w/static linkage",
       "inherits": [
-        "common",
-        "build-type-release"
+        "Release"
       ]
     }
   ]

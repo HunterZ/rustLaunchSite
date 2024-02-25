@@ -22,16 +22,17 @@ jobs:
   build:
     strategy:
       matrix:
+        buildtype: [debug, release]
         include:
-          - {os: windows-latest, tripletbase: x64-mingw-static,   buildtype: minsizerel, msystem: MINGW64, shell: "msys2 {0}"}
-          - {os: windows-latest, tripletbase: x64-windows-static, buildtype: minsizerel, msystem: MSVC,    shell: "cmd"      }
+          - {os: windows-latest, triplet: x64-mingw-static,   msystem: MINGW64, shell: "msys2 {0}"}
+          - {os: windows-latest, triplet: x64-windows-static, msystem: MSVC,    shell: "cmd"      }
 
-    name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+    name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.triplet }}-${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}
 
     env:
-      VCPKG_DEFAULT_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
-      VCPKG_DEFAULT_HOST_TRIPLET: "${{ matrix.tripletbase }}-${{ matrix.buildtype }}"
+      VCPKG_DEFAULT_TRIPLET: "${{ matrix.triplet }}"
+      VCPKG_DEFAULT_HOST_TRIPLET: "${{ matrix.triplet }}"
 
     defaults:
       run:
@@ -120,18 +121,14 @@ jobs:
       - name: Configure project
         run: >-
           ${{ env.SETENV_PATH }} &&
-          cmake --preset "${{ env.VCPKG_DEFAULT_TRIPLET }}"
-      - name: Build project
+          cmake --preset "${{ matrix.triplet }}"
+      - name: Build and stage project
         run: >-
           ${{ env.SETENV_PATH }} &&
-          cmake --build "${{ github.workspace }}/out/build/${{ env.VCPKG_DEFAULT_TRIPLET }}"
-      - name: Stage project
-        run: >-
-          ${{ env.SETENV_PATH }} &&
-          cmake --install "${{ github.workspace }}/out/build/${{ env.VCPKG_DEFAULT_TRIPLET }}"
+          cmake --build --preset "${{ matrix.triplet }}-${{ matrix.buildtype }}" --target install
 
       - name: Package and upload project
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}"
-          path: "${{ github.workspace }}/out/install/${{ env.VCPKG_DEFAULT_TRIPLET }}"
+          name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ matrix.triplet }}-${{ matrix.buildtype }}"
+          path: "${{ github.workspace }}/out/install/${{ matrix.triplet }}"

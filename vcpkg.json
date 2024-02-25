@@ -1,6 +1,6 @@
 {
-  "name": "main",
-  "version-string": "latest",
+  "name": "rust-launch-site",
+  "version-string": "0.0.1",
   "dependencies": [
     "boost-filesystem",
     "boost-process",
@@ -10,8 +10,5 @@
     "kubazip",
     "libconfig",
     "nlohmann-json"
-  ],
-  "vcpkg-configuration": {
-    "overlay-triplets": [ "./vcpkg-triplets" ]
-  }
+  ]
 }
