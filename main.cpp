@@ -60,7 +60,7 @@ bool HandleCtrlC(CtrlCLibrary::CtrlSignal s)
 {
   if (s != CtrlCLibrary::kCtrlCSignal)
   {
-    std::cout << "WARNING: Ignoring unknown signal" << std::endl;
+    std::cout << "rustLaunchSite: WARNING: Ignoring unknown signal" << std::endl;
     return false;
   }
   // attempt to signal main()
@@ -110,7 +110,7 @@ void TimerFunction(
     // if notified, handle new timer state
     if
     (
-      const bool notified(threadData::cvTimer_.wait_until(
+      const auto notified(threadData::cvTimer_.wait_until(
         lock, wakeTime,
         [](){return threadData::notifyTimerThread_;}
       ));
@@ -140,7 +140,7 @@ void TimerFunction(
     // wait time elapsed, or got PAUSE notification
     const bool notifyMain(threadData::timerState_ != TimerState::PAUSE);
     const bool updateTimeElapsed(
-      std::chrono::steady_clock::now() >= updateTime
+      updateIntervalMinutes && std::chrono::steady_clock::now() >= updateTime
     );
     // update target times
     wakeTime += sleepDuration;
@@ -165,6 +165,71 @@ void SetTimerState(const TimerState ts)
   threadData::notifyTimerThread_ = true;
   threadData::cvTimer_.notify_all();
 }
+
+// check for updates according to provided options
+// return pair indicating whether server and/or mod framework needs updating,
+//  respectively
+std::pair<bool, bool> UpdateCheck(
+  const rustLaunchSite::Updater& updater
+, const bool checkServer
+, const bool checkModFramework
+, const bool updateModFrameworkOnServer)
+{
+  std::pair<bool, bool> retVal{false, false};
+  if (checkServer)
+  {
+    std::cout << "rustLaunchSite: Performing server update check" << std::endl;
+    retVal.first = updater.CheckServer();
+  }
+  const bool forceCheck{updateModFrameworkOnServer && retVal.first};
+  if (checkModFramework || forceCheck)
+  {
+    std::cout << "rustLaunchSite: Performing mod framework update check" << std::endl;
+    retVal.second = updater.CheckFramework();
+  }
+  return retVal;
+}
+
+// wrapper around Updater::UpdateFramework() to loop until update succeeds
+void UpdateFramework(
+  const rustLaunchSite::Updater& updater, const bool suppressWarning = false)
+{
+  std::cout << "rustLaunchSite: Entering plugin framework update loop" << std::endl;
+  bool firstTry{true};
+  // TODO: add a sleep and/or maximum try count?
+  for(bool update{true}; update; update = updater.CheckFramework())
+  {
+    if (!firstTry)
+    {
+      std::cout << "rustLaunchSite: WARNING: Detected plugin framework version mismatch after update attempt; trying again..." << std::endl;
+    }
+
+    updater.UpdateFramework(suppressWarning);
+
+    firstTry = false;
+  }
+  std::cout << "rustLaunchSite: Completed plugin framework update loop" << std::endl;
+}
+
+// wrapper around Updater::UpdateServer() to loop until update succeeds
+void UpdateServer(const rustLaunchSite::Updater& updater)
+{
+  std::cout << "rustLaunchSite: Entering server update loop" << std::endl;
+  bool firstTry{true};
+  // TODO: add a sleep and/or maximum try count?
+  for(bool update{true}; update; update = updater.CheckServer())
+  {
+    if (!firstTry)
+    {
+      std::cout << "rustLaunchSite: WARNING: Detected server version mismatch after update attempt; trying again..." << std::endl;
+    }
+
+    updater.UpdateServer();
+
+    firstTry = false;
+  }
+  std::cout << "rustLaunchSite: Completed server update loop" << std::endl;
+}
 }
 
 int main(int argc, char* argv[])
@@ -173,7 +238,7 @@ int main(int argc, char* argv[])
 
   if (argc <= 1)
   {
-    std::cout << "ERROR: Configuration file/path must be specified as an argument" << std::endl;
+    std::cout << "rustLaunchSite: ERROR: Configuration file/path must be specified as an argument" << std::endl;
     return RLS_EXIT::ARG;
   }
 
@@ -182,7 +247,7 @@ int main(int argc, char* argv[])
   const auto handlerId(CtrlCLibrary::SetCtrlCHandler(HandleCtrlC));
   if (handlerId == CtrlCLibrary::kErrorID)
   {
-    std::cout << "ERROR: Failed to install Ctrl+C handler" << std::endl;
+    std::cout << "rustLaunchSite: ERROR: Failed to install Ctrl+C handler" << std::endl;
     return RLS_EXIT::HANDLER;
   }
 
@@ -205,19 +270,22 @@ int main(int argc, char* argv[])
       configSptr, std::make_shared<rustLaunchSite::Downloader>()
     );
 
-    // perform dedicated server software update check
-    std::cout << "rustLaunchSite: Performing initial update check" << std::endl;
-    bool updateServer(updaterUptr->CheckServer());
-    if (updateServer)
     {
-      std::cout << "rustLaunchSite: Updating server" << std::endl;
-      updaterUptr->UpdateServer();
-    }
-    // TODO: may not need to force-update Carbon when server updates
-    if (updateServer || updaterUptr->CheckFramework())
-    {
-      std::cout << "rustLaunchSite: Updating plugin framework (if installed)" << std::endl;
-      updaterUptr->UpdateFramework(updateServer);
+      const auto [updateServerOnStartup, updateModFrameworkOnStartup] =
+        UpdateCheck(
+          *updaterUptr
+        , configSptr->GetUpdateServerOnStartup()
+        , configSptr->GetUpdateModFrameworkOnStartup()
+        , configSptr->GetUpdateModFrameworkOnServerUpdate())
+      ;
+      if (updateServerOnStartup)
+      {
+        UpdateServer(*updaterUptr);
+      }
+      if (updateModFrameworkOnStartup)
+      {
+        UpdateFramework(*updaterUptr, updateServerOnStartup);
+      }
     }
 
     // launch server
@@ -236,7 +304,7 @@ int main(int argc, char* argv[])
     );
     if (!timerThreadUptr)
     {
-      throw std::runtime_error("Failed to instantiate timer thread");
+      throw std::runtime_error("rustLaunchSite: Failed to instantiate timer thread");
     }
 
     // main loop
@@ -268,9 +336,9 @@ int main(int argc, char* argv[])
       if (threadData::notifyMainCtrlC_)
       {
         // attempt an orderly shutdown
-        std::cout << "rustLaunchSite: Ctrl+C signal caught - stopping server" << std::endl;
+        std::cout << "rustLaunchSite: Ctrl+C signal caught; stopping server" << std::endl;
         ::SetTimerState(TimerState::STOP);
-        serverUptr->Stop("Server manager shutting down");
+        serverUptr->Stop("Server manager terminated");
         // as Ctrl+C is the only orderly shutdown stimulus, we want to report a
         //  successful exit
         retVal = RLS_EXIT::SUCCESS;
@@ -279,36 +347,37 @@ int main(int argc, char* argv[])
       // handle update check timer notification
       if (threadData::notifyMainUpdater_)
       {
-        std::cout << "rustLaunchSite: Checking for updates" << std::endl;
         threadData::notifyMainUpdater_ = false;
         // check for updates
+        const auto [updateServerOnInterval, updateModFrameworkOnInterval] =
+          UpdateCheck(
+            *updaterUptr
+          , configSptr->GetUpdateServerOnStartup()
+          , configSptr->GetUpdateModFrameworkOnStartup()
+          , configSptr->GetUpdateModFrameworkOnServerUpdate())
+        ;
         // if any are needed: take server down, install updates, relaunch server
-        updateServer = updaterUptr->CheckServer();
-        // TODO: may not need to force-update Carbon when server updates
-        const bool updateFramework(updateServer || updaterUptr->CheckFramework());
-        if (updateServer || updateFramework)
+        if (updateServerOnInterval || updateModFrameworkOnInterval)
         {
           // pause timer thread
-          // probably doesn't matter since we hold the mutex though
+          // ...although this probably doesn't matter, since we hold the mutex
           ::SetTimerState(TimerState::PAUSE);
           // stop server
-          std::cout << "rustLaunchSite: Update(s) required - stopping server" << std::endl;
+          std::cout << "rustLaunchSite: Update(s) required; stopping server" << std::endl;
           // install updates
           serverUptr->Stop("Installing updates");
-          if (updateServer)
+          if (updateServerOnInterval)
           {
-            std::cout << "rustLaunchSite: Installing server update" << std::endl;
-            updaterUptr->UpdateServer();
+            UpdateServer(*updaterUptr);
           }
-          if (updateFramework)
+          if (updateModFrameworkOnInterval)
           {
-            std::cout << "rustLaunchSite: Updating plugin framework (if installed)" << std::endl;
-            updaterUptr->UpdateFramework(updateServer);
+            UpdateFramework(*updaterUptr, updateServerOnInterval);
           }
-          std::cout << "rustLaunchSite: Update(s) complete - relaunching server" << std::endl;
+          std::cout << "rustLaunchSite: Update(s) complete; starting server" << std::endl;
           if (!serverUptr->Start())
           {
-            std::cout << "rustLaunchSite: Server failed to restart; shutting down" << std::endl;
+            std::cout << "rustLaunchSite: Server failed to start; shutting down" << std::endl;
             retVal = RLS_EXIT::UPDATE;
             break;
           }
@@ -323,7 +392,7 @@ int main(int argc, char* argv[])
         // check if server is running
         if (serverUptr->IsRunning())
         {
-          // server is running - check for protocol via RCON
+          // server is running; check for protocol via RCON
           // just poll every time, as RCON connection seems to die if we don't
           //  use it?
           // if (!gotProtocol)
@@ -336,7 +405,7 @@ int main(int argc, char* argv[])
           {
             // gotProtocol = true;
             std::cout
-              << "Got server info via RCON:"
+              << "rustLaunchSite: Got server info via RCON:"
               << "\n\tplayers=" << serverInfo.players_
               << "\n\tprotocol=" << serverInfo.protocol_
               << std::endl;
@@ -351,10 +420,28 @@ int main(int argc, char* argv[])
           // configured to automatically restart
           // pause timers during server restart
           ::SetTimerState(TimerState::PAUSE);
-          std::cout << "rustLaunchSite: Server stopped unexpectedly - relaunching" << std::endl;
+          std::cout << "rustLaunchSite: Server stopped unexpectedly" << std::endl;
+          // check for updates while the server is down
+          const auto [updateServerOnRelaunch, updateModFrameworkOnRelaunch] =
+            UpdateCheck(
+              *updaterUptr
+            , configSptr->GetUpdateServerOnRelaunch()
+            , configSptr->GetUpdateModFrameworkOnRelaunch()
+            , configSptr->GetUpdateModFrameworkOnServerUpdate())
+          ;
+          if (updateServerOnRelaunch)
+          {
+            UpdateServer(*updaterUptr);
+          }
+          if (updateModFrameworkOnRelaunch)
+          {
+            UpdateFramework(*updaterUptr, updateServerOnRelaunch);
+          }
+          // relaunch server
+          std::cout << "rustLaunchSite: Relaunching server" << std::endl;
           if (!serverUptr->Start())
           {
-            std::cout << "rustLaunchSite: Server failed to restart; shutting down" << std::endl;
+            std::cout << "rustLaunchSite: Server failed to relaunch; shutting down" << std::endl;
             retVal = RLS_EXIT::RESTART;
             break;
           }
@@ -364,7 +451,7 @@ int main(int argc, char* argv[])
         {
           // configured to shutdown on unexpected server stop
           ::SetTimerState(TimerState::STOP);
-          std::cout << "rustLaunchSite: Server stopped unexpectedly - shutting down" << std::endl;
+          std::cout << "rustLaunchSite: Server stopped unexpectedly; shutting down" << std::endl;
           retVal = RLS_EXIT::RESTART;
           break;
         }
@@ -372,7 +459,7 @@ int main(int argc, char* argv[])
       // end of main loop
     }
 
-    std::cout << "rustLaunchSite: Exited main loop - shutting down" << std::endl;
+    std::cout << "rustLaunchSite: Exited main loop; beginning shutdown process" << std::endl;
     std::cout << "rustLaunchSite: Stopping timer thread" << std::endl;
     ::SetTimerState(TimerState::STOP);
     timerThreadUptr->join();
@@ -381,12 +468,12 @@ int main(int argc, char* argv[])
   }
   catch (const std::exception& e)
   {
-    std::cout << "ERROR: Unhandled exception: " << e.what() << std::endl;
+    std::cout << "rustLaunchSite: ERROR: Unhandled exception: " << e.what() << std::endl;
     retVal = RLS_EXIT::EXCEPTION;
   }
   catch(...)
   {
-    std::cout << "ERROR: Unknown exception" << std::endl;
+    std::cout << "rustLaunchSite: ERROR: Unknown exception" << std::endl;
     retVal = RLS_EXIT::EXCEPTION;
   }
 

@@ -99,16 +99,16 @@ const std::vector<std::string_view> FRAMEWORK_STRING_UPPER
   { "NONE", "CARBON", "OXIDE" };
 
 std::string_view ToString(
-  const rustLaunchSite::Updater::PluginFramework framework,
+  const rustLaunchSite::Config::ModFrameworkType framework,
   const ToStringCase stringCase
 )
 {
   std::size_t index{0};
   switch (framework)
   {
-    case rustLaunchSite::Updater::PluginFramework::NONE:   index = 0; break;
-    case rustLaunchSite::Updater::PluginFramework::CARBON: index = 1; break;
-    case rustLaunchSite::Updater::PluginFramework::OXIDE:  index = 2; break;
+    case rustLaunchSite::Config::ModFrameworkType::NONE:   index = 0; break;
+    case rustLaunchSite::Config::ModFrameworkType::CARBON: index = 1; break;
+    case rustLaunchSite::Config::ModFrameworkType::OXIDE:  index = 2; break;
   }
   switch (stringCase)
   {
@@ -119,36 +119,18 @@ std::string_view ToString(
   return {};
 }
 
-rustLaunchSite::Updater::PluginFramework ToFramework(
-  const rustLaunchSite::Config::ModFramework framework
-)
-{
-  // yes, this is a 1:1 mapping, but we don't want a header / public API level
-  //  dependency on Config::ModFramework
-  switch (framework)
-  {
-    case rustLaunchSite::Config::ModFramework::NONE:
-      break;
-    case rustLaunchSite::Config::ModFramework::CARBON:
-      return rustLaunchSite::Updater::PluginFramework::CARBON;
-    case rustLaunchSite::Config::ModFramework::OXIDE:
-      return rustLaunchSite::Updater::PluginFramework::OXIDE;
-  }
-  return rustLaunchSite::Updater::PluginFramework::NONE;
-}
-
 std::filesystem::path GetFrameworkDllPath(
   const std::filesystem::path& serverInstallPath,
-  const rustLaunchSite::Updater::PluginFramework framework
+  const rustLaunchSite::Config::ModFrameworkType framework
 )
 {
   switch (framework)
   {
-    case rustLaunchSite::Updater::PluginFramework::NONE:
+    case rustLaunchSite::Config::ModFrameworkType::NONE:
       break;
-    case rustLaunchSite::Updater::PluginFramework::CARBON:
+    case rustLaunchSite::Config::ModFrameworkType::CARBON:
       return serverInstallPath / "carbon/managed/Carbon.dll";
-    case rustLaunchSite::Updater::PluginFramework::OXIDE:
+    case rustLaunchSite::Config::ModFrameworkType::OXIDE:
       return serverInstallPath / "RustDedicated_Data/Managed/Oxide.Rust.dll";
   }
   return {};
@@ -165,19 +147,18 @@ const std::vector<std::string_view> FRAMEWORK_URL
 };
 
 std::string_view GetFrameworkURL(
-  const rustLaunchSite::Updater::PluginFramework framework
+  const rustLaunchSite::Config::ModFrameworkType framework
 )
 {
   std::size_t index{0};
   switch (framework)
   {
-    case rustLaunchSite::Updater::PluginFramework::NONE:   index = 0; break;
-    case rustLaunchSite::Updater::PluginFramework::CARBON: index = 1; break;
-    case rustLaunchSite::Updater::PluginFramework::OXIDE:  index = 2; break;
+    case rustLaunchSite::Config::ModFrameworkType::NONE:   index = 0; break;
+    case rustLaunchSite::Config::ModFrameworkType::CARBON: index = 1; break;
+    case rustLaunchSite::Config::ModFrameworkType::OXIDE:  index = 2; break;
   }
   return FRAMEWORK_URL.at(index);
 }
-
 
 const std::vector<std::string_view> FRAMEWORK_ASSET
 {
@@ -190,15 +171,15 @@ const std::vector<std::string_view> FRAMEWORK_ASSET
 };
 
 std::string_view GetFrameworkAsset(
-  const rustLaunchSite::Updater::PluginFramework framework
+  const rustLaunchSite::Config::ModFrameworkType framework
 )
 {
   std::size_t index{0};
   switch (framework)
   {
-    case rustLaunchSite::Updater::PluginFramework::NONE:   index = 0; break;
-    case rustLaunchSite::Updater::PluginFramework::CARBON: index = 1; break;
-    case rustLaunchSite::Updater::PluginFramework::OXIDE:  index = 2; break;
+    case rustLaunchSite::Config::ModFrameworkType::NONE:   index = 0; break;
+    case rustLaunchSite::Config::ModFrameworkType::CARBON: index = 1; break;
+    case rustLaunchSite::Config::ModFrameworkType::OXIDE:  index = 2; break;
   }
   return FRAMEWORK_ASSET.at(index);
 }
@@ -210,12 +191,12 @@ Updater::Updater(
   std::shared_ptr<const Config> cfgSptr,
   std::shared_ptr<Downloader> downloaderSptr
 )
-  : downloaderSptr_(downloaderSptr)
+  : cfgSptr_(cfgSptr)
+  , downloaderSptr_(downloaderSptr)
   , serverInstallPath_(cfgSptr->GetInstallPath())
   , downloadPath_(cfgSptr->GetPathsDownload())
-  , serverUpdateCheck_(cfgSptr->GetUpdateServer())
-  , frameworkUpdateCheck_(ToFramework(cfgSptr->GetUpdateModFramework()))
-  , frameworkDllPath_(GetFrameworkDllPath(serverInstallPath_, frameworkUpdateCheck_))
+  , frameworkDllPath_(GetFrameworkDllPath(
+      serverInstallPath_, cfgSptr->GetUpdateModFrameworkType()))
 {
   // install path must be either a directory, or a symbolic link to one
   if (!IsDirectory(serverInstallPath_))
@@ -227,59 +208,48 @@ Updater::Updater(
     throw std::invalid_argument(std::string("ERROR: Rust dedicated server not found in configured install path: ") + serverInstallPath_.string());
   }
 
-  if (serverUpdateCheck_)
+  // derive the Steam app manifest path from the configured install location
+  appManifestPath_ = serverInstallPath_ / "steamapps/appmanifest_258550.acf";
+  if (std::filesystem::exists(appManifestPath_))
   {
-    // derive the Steam app manifest path from the configured install location
-    appManifestPath_ = serverInstallPath_ / "steamapps/appmanifest_258550.acf";
-    if (std::filesystem::exists(appManifestPath_))
+    // extract SteamCMD utility path from manifest
+    steamCmdPath_ = GetAppManifestValue(appManifestPath_, "AppState.LauncherPath");
+    if (steamCmdPath_.empty())
     {
-      // extract SteamCMD utility path from manifest
-      steamCmdPath_ = GetAppManifestValue(appManifestPath_, "AppState.LauncherPath");
-      if (steamCmdPath_.empty())
-      {
-        std::cout << "WARNING: Failed to locate SteamCMD path from manifest file " << appManifestPath_ << "; automatic Steam updates disabled\n";
-        serverUpdateCheck_ = false;
-      }
-      else if (!std::filesystem::exists(steamCmdPath_))
-      {
-        std::cout << "WARNING: Failed to locate SteamCMD at manifest file specified path " << steamCmdPath_ << "; automatic Steam updates disabled\n";
-        steamCmdPath_.clear();
-        serverUpdateCheck_ = false;
-      }
+      std::cout << "WARNING: Failed to locate SteamCMD path from manifest file " << appManifestPath_ << "; automatic Steam updates disabled\n";
     }
-    else
+    else if (!std::filesystem::exists(steamCmdPath_))
     {
-      std::cout << "WARNING: Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled\n";
-      appManifestPath_.clear();
-      serverUpdateCheck_ = false;
+      std::cout << "WARNING: Failed to locate SteamCMD at manifest file specified path " << steamCmdPath_ << "; automatic Steam updates disabled\n";
+      steamCmdPath_.clear();
     }
+  }
+  else
+  {
+    std::cout << "WARNING: Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled\n";
+    appManifestPath_.clear();
   }
 
   if (
-    frameworkUpdateCheck_ != PluginFramework::NONE
-    && !std::filesystem::exists(frameworkDllPath_)
-  )
+    !frameworkDllPath_.empty() && !std::filesystem::exists(frameworkDllPath_))
   {
-    std::cout << "WARNING: " << frameworkDllPath_ << " not found; automatic " << ToString(frameworkUpdateCheck_, ToStringCase::TITLE) << " updates disabled\n";
+    std::cout << "WARNING: Modding framework DLL '" << frameworkDllPath_ << "' not found; automatic " << ToString(cfgSptr->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " updates disabled\n";
+    downloadPath_.clear();
     frameworkDllPath_.clear();
-    frameworkUpdateCheck_ = PluginFramework::NONE;
   }
-
-  if (frameworkUpdateCheck_ != PluginFramework::NONE)
+  if (!frameworkDllPath_.empty())
   {
     if (!IsDirectory(downloadPath_))
     {
-      std::cout << "WARNING: Configured download path " << downloadPath_ << " is not a directory; automatic " << ToString(frameworkUpdateCheck_, ToStringCase::TITLE) << " updates disabled\n";
+      std::cout << "WARNING: Configured download path " << downloadPath_ << " is not a directory; automatic " << ToString(cfgSptr->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " updates disabled\n";
       downloadPath_.clear();
       frameworkDllPath_.clear();
-      frameworkUpdateCheck_ = PluginFramework::NONE;
     }
     else if (!IsWritable(downloadPath_))
     {
-      std::cout << "WARNING: Configured download path " << downloadPath_ << " is not writable; automatic " << ToString(frameworkUpdateCheck_, ToStringCase::TITLE) << " updates disabled\n";
+      std::cout << "WARNING: Configured download path " << downloadPath_ << " is not writable; automatic " << ToString(cfgSptr->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " updates disabled\n";
       downloadPath_.clear();
       frameworkDllPath_.clear();
-      frameworkUpdateCheck_ = PluginFramework::NONE;
     }
   }
 
@@ -290,8 +260,8 @@ Updater::~Updater() = default;
 
 bool Updater::CheckFramework() const
 {
-  const auto& frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
-  if (frameworkUpdateCheck_ == PluginFramework::NONE) { return false; }
+  if (cfgSptr_->GetUpdateModFrameworkType() == Config::ModFrameworkType::NONE) { return false; }
+  const auto& frameworkTitle{ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE)};
   const auto& currentVersion(GetInstalledFrameworkVersion());
   std::cout << "CheckFramework(): Installed " << frameworkTitle << " version: '" << currentVersion << "'\n";
   const auto& latestVersion(GetLatestFrameworkVersion());
@@ -304,7 +274,6 @@ bool Updater::CheckFramework() const
 
 bool Updater::CheckServer() const
 {
-  if (!serverUpdateCheck_) { return false; }
   const std::string& currentServerVersion(GetInstalledServerBuild());
   std::cout << "CheckServer(): Installed Server version: '" << currentServerVersion << "'\n";
   const std::string& latestServerVersion(
@@ -319,7 +288,8 @@ bool Updater::CheckServer() const
 
 void Updater::UpdateFramework(const bool suppressWarning) const
 {
-  const std::string_view frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
+  if (cfgSptr_->GetUpdateModFrameworkType() == Config::ModFrameworkType::NONE) { return; }
+  const auto& frameworkTitle{ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE)};
   // abort if Carbon/Oxide was not already installed
   // this should also catch the case that this is called when update checking is
   //  disabled, but we don't explicity support that
@@ -333,7 +303,6 @@ void Updater::UpdateFramework(const bool suppressWarning) const
   }
 
   // abort if any required path is empty, meaning it failed validation
-  // this is pathological, but this is also meant to be production software
   if (downloadPath_.empty() || serverInstallPath_.empty())
   {
     std::cout << "ERROR: Cannot update " << frameworkTitle << " because download and/or server install path is invalid\n";
@@ -506,12 +475,12 @@ void Updater::UpdateServer() const
   ));
   if (errorCode)
   {
-    std::cout << "WARNING: Error running server update command: " << errorCode.message()<< "\n";
+    std::cout << "WARNING: Error running server update command: " << errorCode.message() << "\n";
     return;
   }
   if (exitCode)
   {
-    std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode<< "\n";
+    std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode << "\n";
     return;
   }
   // std::cout << "Server update successful\n";
@@ -580,7 +549,7 @@ std::string Updater::GetInstalledFrameworkVersion() const
   ));
   if (errorCode)
   {
-    std::cout << "ERROR: Error running " << ToString(frameworkUpdateCheck_, ToStringCase::TITLE) << " version check command: " << errorCode.message() << "\n";
+    std::cout << "ERROR: Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message() << "\n";
     return retVal;
   }
   if (exitCode)
@@ -699,7 +668,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   {
     std::cout << "WARNING: Error running server update command: " << errorCode.message()<< "\n";
   }
-  if (const int exitCode(sc.exit_code()); exitCode)
+  if (const auto exitCode{sc.exit_code()}; exitCode)
   {
     std::cout << "WARNING: SteamCMD returned nonzero exit code: " << exitCode << "\n";
   }
@@ -741,10 +710,11 @@ std::string Updater::GetLatestFrameworkURL() const
     std::cout << "ERROR: Downloader handle is null\n";
     return {};
   }
-  const std::string_view frameworkURL{GetFrameworkURL(frameworkUpdateCheck_)};
+  const auto& modFrameworkType{cfgSptr_->GetUpdateModFrameworkType()};
+  const std::string_view frameworkURL{GetFrameworkURL(modFrameworkType)};
   const std::string& frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
-  const std::string_view frameworkAsset{GetFrameworkAsset(frameworkUpdateCheck_)};
-  const std::string_view frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
+  const std::string_view frameworkAsset{GetFrameworkAsset(modFrameworkType)};
+  const std::string_view frameworkTitle{ToString(modFrameworkType, ToStringCase::TITLE)};
 
   try
   {
@@ -779,23 +749,24 @@ std::string Updater::GetLatestFrameworkVersion() const
     std::cout << "ERROR: Downloader handle is null\n";
     return {};
   }
-  const std::string_view frameworkURL{GetFrameworkURL(frameworkUpdateCheck_)};
+  const auto& modFrameworkType{cfgSptr_->GetUpdateModFrameworkType()};
+  const std::string_view frameworkURL{GetFrameworkURL(modFrameworkType)};
   const std::string& frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
-  const std::string_view frameworkTitle{ToString(frameworkUpdateCheck_, ToStringCase::TITLE)};
+  const std::string_view frameworkTitle{ToString(modFrameworkType, ToStringCase::TITLE)};
 
   try
   {
     const auto& j(nlohmann::json::parse(frameworkInfo));
-    switch (frameworkUpdateCheck_)
+    switch (modFrameworkType)
     {
-      case PluginFramework::NONE: break;
+      case Config::ModFrameworkType::NONE: break;
       // need to process the Carbon release name
-      case PluginFramework::CARBON:
+      case Config::ModFrameworkType::CARBON:
       {
         // Carbon release versions look like "Production Build — v1.2024.1033.4309"
         // ...but we only want the part after the 'v', so strip the rest off
         static const std::string_view CARBON_PREFIX{"Production Build — v"};
-        const std::string& carbonVersion{j["name"]};
+        const std::string& carbonVersion(j["name"]);
         // bail if the version string doesn't start with the prefix string, as it
         //  means release naming has changed
         if (carbonVersion.find(CARBON_PREFIX) != 0)
@@ -807,7 +778,7 @@ std::string Updater::GetLatestFrameworkVersion() const
         return carbonVersion.substr(CARBON_PREFIX.length());
       }
       // just return the raw release name for Oxide
-      case PluginFramework::OXIDE: return j["name"];
+      case Config::ModFrameworkType::OXIDE: return j["name"];
     }
     std::cout << "ERROR: Unsupported plugin framework\n";
     return {};

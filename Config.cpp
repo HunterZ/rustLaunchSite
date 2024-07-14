@@ -7,6 +7,22 @@
 
 namespace
 {
+// helper function for getting optional Config values, when we want to fall back
+//  to some default value when no explicit one exists
+// NOTES:
+// - path is std::string rather than std::string_view because libconfig is
+//    internally a C library that ultimately needs a guaranteed null-terminated
+//    string, so we'd have to launder a std::string_view through a temporary
+//    std::string anyway
+// - assumes that T has a copy constructor, as libconfig++ lookup() depends on
+//    overloaded function operators to convert settings to the desired type
+template<typename T>
+T GetConfigValue(const libconfig::Config& cfg, const std::string& path, const T& defaultValue = {})
+{
+  if (!cfg.exists(path)) { return defaultValue; }
+  return cfg.lookup(path).operator T();
+}
+
 // internal logic to populate parameter map with config settings under path:
 // - scalar setting names are appended to `prefix` to form key name
 // - when a group setting is encountered, a recursive call is made to process
@@ -130,18 +146,13 @@ Config::Config(std::filesystem::path configFile)
     pathsDownload_.make_preferred();
 
     // process
-    processAutoRestart_ = (
-      cfg.exists("rustLaunchSite.process.autoRestart")
-      && cfg.lookup("rustLaunchSite.process.autoRestart")
-    );
+    processAutoRestart_ = GetConfigValue<bool>(
+      cfg, "rustLaunchSite.process.autoRestart");
     // default optional integer to zero
-    processShutdownDelaySeconds_ = 0;
-    if (cfg.exists("rustLaunchSite.process.shutdownDelaySeconds"))
-    {
-      processShutdownDelaySeconds_ = cfg.lookup("rustLaunchSite.process.shutdownDelaySeconds");
-      // collapse other possible "disable" values to zero
-      if (processShutdownDelaySeconds_ < 0) { processShutdownDelaySeconds_ = 0; }
-    }
+    processShutdownDelaySeconds_ = GetConfigValue<int>(
+      cfg, "rustLaunchSite.process.shutdownDelaySeconds");
+    // collapse other possible "disable" values to zero
+    if (processShutdownDelaySeconds_ < 0) { processShutdownDelaySeconds_ = 0; }
 
     // rcon
     rconPassword_ = cfg.lookup("rustLaunchSite.rcon.password").c_str();
@@ -150,35 +161,26 @@ Config::Config(std::filesystem::path configFile)
     // check for optional settings existence before looking up
     // bools that default to false can just "and" together the existence and
     //  value
-    rconPassthroughIP_ = (
-      cfg.exists("rustLaunchSite.rcon.passthrough.ip")
-      && cfg.lookup("rustLaunchSite.rcon.passthrough.ip")
-    );
-    rconPassthroughPort_ = (
-      cfg.exists("rustLaunchSite.rcon.passthrough.port")
-      && cfg.lookup("rustLaunchSite.rcon.passthrough.port")
-    );
-    rconLog_ = (
-      cfg.exists("rustLaunchSite.rcon.log")
-      && cfg.lookup("rustLaunchSite.rcon.log")
-    );
+    rconPassthroughIP_ = GetConfigValue<bool>(
+      cfg, "rustLaunchSite.rcon.passthrough.ip");
+    rconPassthroughPort_ = GetConfigValue<bool>(
+      cfg, "rustLaunchSite.rcon.passthrough.port");
+    rconLog_ = GetConfigValue<bool>(cfg, "rustLaunchSite.rcon.log");
 
     // seed
     // string that needs to be converted to an enum
     seedStrategy_ = SeedStrategy::RANDOM;
-    if (cfg.exists("rustLaunchSite.seed.strategy"))
+    const auto& seedStrategy{GetConfigValue<std::string>(
+      cfg, "rustLaunchSite.seed.strategy")};
+    if (seedStrategy == "fixed") { seedStrategy_ = SeedStrategy::FIXED; }
+    else if (seedStrategy == "list") { seedStrategy_ = SeedStrategy::LIST; }
+    else if (seedStrategy == "random") { seedStrategy_ = SeedStrategy::RANDOM; }
+    else if (!seedStrategy.empty())
     {
-      const std::string& seedStrategy(cfg.lookup("rustLaunchSite.seed.strategy"));
-      if (seedStrategy == "fixed") { seedStrategy_ = SeedStrategy::FIXED; }
-      else if (seedStrategy == "list") { seedStrategy_ = SeedStrategy::LIST; }
-      else if (seedStrategy == "random") { seedStrategy_ = SeedStrategy::RANDOM; }
-      else
-      {
-        throw std::invalid_argument(
-          std::string("Invalid rustLaunchSite.seed.strategy value: ")
-          + seedStrategy
-        );
-      }
+      throw std::invalid_argument(
+        std::string("Invalid rustLaunchSite.seed.strategy value: ")
+        + seedStrategy
+      );
     }
     // supplemental settings may be required depending on seed strategy
     seedFixed_ = 0;
@@ -211,51 +213,85 @@ Config::Config(std::filesystem::path configFile)
     }
 
     // update
-    updateOnLaunch_ = (
-      cfg.exists("rustLaunchSite.update.onLaunch")
-      && cfg.lookup("rustLaunchSite.update.onLaunch")
-    );
-    updateServer_ = (
-      cfg.exists("rustLaunchSite.update.server")
-      && cfg.lookup("rustLaunchSite.update.server")
-    );
-    updateModFramework_ = ModFramework::NONE;
-    if (cfg.exists("rustLaunchSite.update.modFramework"))
+    if (cfg.exists("rustLaunchSite.update"))
     {
-      const std::string& updateModFramework(cfg.lookup("rustLaunchSite.update.modFramework"));
-      if (updateModFramework == "carbon")
+      //  server
+      if (cfg.exists("rustLaunchSite.update.server"))
       {
-        updateModFramework_ = ModFramework::CARBON;
+        updateServerOnInterval_ = GetConfigValue<bool>(
+          cfg, "rustLaunchSite.update.server.onInterval");
+        updateServerOnRelaunch_ = GetConfigValue<bool>(
+          cfg, "rustLaunchSite.update.server.onRelaunch");
+        updateServerOnStartup_ = GetConfigValue<bool>(
+          cfg, "rustLaunchSite.update.server.onStartup");
       }
-      else if (updateModFramework == "oxide")
+      //  modFramework
+      updateModFrameworkType_ = ModFrameworkType::NONE;
+      if (cfg.exists("rustLaunchSite.update.modFramework"))
       {
-        updateModFramework_ = ModFramework::OXIDE;
+        const auto& modFrameworkType{GetConfigValue<std::string>(
+          cfg, "rustLaunchSite.update.modFramework.type")};
+        if ("carbon" == modFrameworkType)
+        {
+          updateModFrameworkType_ = ModFrameworkType::CARBON;
+        }
+        else if ("oxide" == modFrameworkType)
+        {
+          updateModFrameworkType_ = ModFrameworkType::OXIDE;
+        }
+        else if (!modFrameworkType.empty())
+        {
+          std::cout << "WARNING: Interpreting unsupported modFramework type value as empty: '" << modFrameworkType << "'" << std::endl;
+        }
       }
-      else
+      //   check type first, because we want to force other values to false if it
+      //    does not resolve to a valid value
+      if (updateModFrameworkType_ != ModFrameworkType::NONE)
       {
-        std::cout << "WARNING: Ignoring unsupported modFramework value: '" << updateModFramework << "'" << std::endl;
+        updateModFrameworkOnInterval_ = GetConfigValue<bool>(
+          cfg, "rustLaunchSite.update.modFramework.onInterval");
+        updateModFrameworkOnRelaunch_ = GetConfigValue<bool>(
+          cfg, "rustLaunchSite.update.modFramework.onRelaunch");
+        updateModFrameworkOnServerUpdate_ = GetConfigValue<bool>(
+          cfg, "rustLaunchSite.update.modFramework.onServerUpdate");
+        updateModFrameworkOnStartup_ = GetConfigValue<bool>(
+          cfg, "rustLaunchSite.update.modFramework.onStartup");
       }
-    }
-    updateIntervalMinutes_ = 0;
-    if (cfg.exists("rustLaunchSite.update.intervalMinutes"))
-    {
-      updateIntervalMinutes_ = cfg.lookup("rustLaunchSite.update.intervalMinutes");
+      //  local value(s)
+      updateIntervalMinutes_ = GetConfigValue<int>(
+        cfg, "rustLaunchSite.update.intervalMinutes");
+      //   enforce validity & consistency here, to simplify dependent logic
       if (updateIntervalMinutes_ < 0)
       {
-        std::cout << "WARNING: Ignoring negative intervalMinutes value: '" << updateIntervalMinutes_ << "'" << std::endl;
+        std::cout << "WARNING: Interpreting unsupported negative update.intervalMinutes value as 0: '" << updateIntervalMinutes_ << "'" << std::endl;
         updateIntervalMinutes_ = 0;
+      }
+      else if (updateIntervalMinutes_
+        && !updateServerOnInterval_ && !updateModFrameworkOnInterval_)
+      {
+        std::cout << "WARNING: Ignoring update.intervalMinutes value because update.server and update.modFramework onInterval are both false: '" << updateIntervalMinutes_ << "'" << std::endl;
+        updateIntervalMinutes_ = 0;
+      }
+      if (!updateIntervalMinutes_)
+      {
+        if (updateServerOnInterval_)
+        {
+          std::cout << "WARNING: Ignoring update.server.onInterval=true because update.intervalMinutes=0" << std::endl;
+          updateServerOnInterval_ = false;
+        }
+        if (updateModFrameworkOnInterval_)
+        {
+          std::cout << "WARNING: Ignoring update.modFramework.onInterval=true because update.intervalMinutes=0" << std::endl;
+          updateModFrameworkOnInterval_ = false;
+        }
       }
     }
 
     // wipe
-    wipeOnProtocolChange_ = (
-      cfg.exists("rustLaunchSite.wipe.onProtocolChange")
-      && cfg.lookup("rustLaunchSite.wipe.onProtocolChange")
-    );
-    wipeBlueprints_ = (
-      cfg.exists("rustLaunchSite.wipe.blueprints")
-      && cfg.lookup("rustLaunchSite.wipe.blueprints")
-    );
+    wipeOnProtocolChange_ = GetConfigValue<bool>(
+        cfg, "rustLaunchSite.wipe.onProtocolChange");
+    wipeBlueprints_ = GetConfigValue<bool>(
+        cfg, "rustLaunchSite.wipe.blueprints");
 
     // *** rustDedicated settings ***
 

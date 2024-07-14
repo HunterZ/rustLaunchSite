@@ -29,7 +29,7 @@ I have a lot of ideas for improving RLS. See the Issues section of the project, 
 I should also mention that some features mentioned in `example.cfg` have not been implemented yet - most notably wipe automation.
 
 ## Building & Library Dependencies
-RLS is written in C++ and was developed in VS Code using CMake, MSYS2 MinGW x64, and vcpkg. I use static linking to minimize deployment size and complexity, but dynamic linking _should_ be possible. A vcpkg manifest and CMake preset are provided, which assume that the environment variable VCPKG_ROOT is defined.
+RLS is written in C++ and was developed in Visual Studio Code using CMake, MSYS2 MinGW x64, and vcpkg. I use static linking to minimize deployment size and complexity, but dynamic linking _should_ be possible. A vcpkg manifest and CMake preset are provided, which assume that the environment variable VCPKG_ROOT is defined.
 
 RLS currently has the following FOSS library dependencies without modifications, all of which are available via vcpkg or MSYS2 except for Ctrl+C which was sourced from GitHub: https://github.com/evgenykislov/ctrl-c
 - Boost (filesystem, process, property-tree)
@@ -39,6 +39,10 @@ RLS currently has the following FOSS library dependencies without modifications,
 - libconfig
 - libcurl
 - nlohmann_json
+
+RLS has also been made to work with MSVC via vscode. This requires installing Visual Studio BuildTools and then launching vscode from an x64 Native Tools Command Prompt to setup the build environment properly.
+
+Preliminary GitHub Actions support has also been implemented to provide automated server-side MinGW and MSVC builds.
 
 ## Contributing
 Contributions are welcome. Feel free to open issues and/or pull requests. I cannot guarantee that I will act on these, however, so you also have my blessing to maintain your own fork (although I'd certainly appreciate credit for my contributions) or possibly become a co-owner.

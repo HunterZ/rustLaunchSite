@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.26.3)
+cmake_minimum_required(VERSION 3.28)
 
 project(rustLaunchSite
   LANGUAGES CXX
@@ -33,8 +33,7 @@ set(BOOST_USE_DEBUG_LIBS $<CONFIG:Debug>)
 set(BOOST_USE_RELEASE_LIBS $<NOT:$<CONFIG:Debug>>)
 
 # use config mode to prefer vcpkg versions
-#  ...except for Boost, because vcpkg uses special goop to work with FindBoost
-find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(kubazip CONFIG REQUIRED)
