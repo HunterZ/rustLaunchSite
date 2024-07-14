@@ -54,10 +54,10 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-          sdk: "10.0.22621.0"
-          toolset: "14.39.33519"
+          # sdk: "10.1.22621.3233"
+          # toolset: "14.40.33810"
           uwp: false
-          vsversion: "17.0"
+          # vsversion: "17.10.35013.160"
       - name: Setup MSVC environment (2/2)
         if: ${{ env.MSYSTEM == 'MSVC' }}
         run: |
