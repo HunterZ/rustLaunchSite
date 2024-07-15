@@ -1,111 +1,149 @@
 #include "Config.h"
 
 #include <iostream>
-#include <libconfig.h++>
+#include <fstream>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <sstream>
+#include <string_view>
 
 namespace
 {
-// internal logic to populate parameter map with config settings under path:
-// - scalar setting names are appended to `prefix` to form key name
-// - when a group setting is encountered, a recursive call is made to process
-//   the group's sub-settings, with:
-//   - groupPath set to the group setting's full path
-//   - prefix set to passed-in prefix with group name and a period appended
-void GetParameters(
+// return value for the given key under the given JSON object if it exists, or a
+//  default value otherwise
+// NOTE: assumes that T has a copy constructor, plus a default constructor if no
+//  default value is provided
+template<typename T>
+T GetOptionalValue(
+  const nlohmann::json& j, std::string_view key, const T& defaultValue = {})
+{
+  if (j.contains(key)) { return j.at(key).template get<T>(); }
+  return defaultValue;
+}
+
+// assign to the given object the value for the given key under the given JSON
+//  object if the key exists, or assign the default value otherwise
+// NOTE: assumes that T has an assignment operator, plus a default constructor
+//  if no default value is provided
+template<typename T>
+void GetOptionalValueTo(
+  T& dest
+, const nlohmann::json& j
+, std::string_view key
+, const T& defaultValue = {})
+{
+  if (j.contains(key))
+  {
+    j.at(key).get_to(dest);
+  }
+  else
+  {
+    dest = defaultValue;
+  }
+}
+
+// populate given parameter map with config settings under given JSON tree
+// NOTES:
+// - this is called recursively to walk the tree
+// - tree structure is flattened by concatenating successive levels' key names
+//    to `path`, using `.` as a separator
+// - it is expected that the JSON node that represents the initial `path`
+//    starting point will be passed in, and `path` will be used as its name in
+//    place of its actual key in order to support a custom parameter prefix
+void GetParametersTo(
   rustLaunchSite::Config::ParameterMapType& pMap
-, const libconfig::Config& cfg
-, const std::string& groupPath
-, const std::string& prefix
+, const nlohmann::json& j
+, const std::string& path
 )
 {
-  // std::cout << "GetParameters(_, _, " << groupPath << ", " << prefix << ")" << std::endl;
-  if (!cfg.exists(groupPath)) { return; }
+  // std::cout << "GetParametersTo(): Called with path=" << path << std::endl;
 
-  const auto& pGroup(cfg.lookup(groupPath));
-  for (const auto& setting : pGroup)
+  // iterate over all items under j
+  for (const auto& [key, value] : j.items())
   {
-    const std::string& name(prefix + setting.getName());
-    switch (setting.getType())
+    // add item's name to current level starting path to get its full path
+    const std::string& itemPath{path + key};
+    // store data values in map, or recruse into objects
+    switch (value.type())
     {
-      case libconfig::Setting::TypeNone:
+      case nlohmann::json::value_t::boolean:
       {
-        // treat settings with no value as false booleans
-        // std::cout << "Setting " << setting.getPath() << ", TypeNone => Name " << name << ", bool, Value false" << std::endl;
-        pMap.try_emplace(name, false);
+        pMap.try_emplace(itemPath, value.template get<bool>());
+        // std::cout << "GetParametersTo(): Emplaced bool " << itemPath << " = " << pMap.at(itemPath).ToString() << std::endl;
       }
       break;
-      case libconfig::Setting::TypeInt:
-      case libconfig::Setting::TypeInt64:
+      case nlohmann::json::value_t::number_float:
       {
-        // std::cout << "Setting " << setting.getPath() << ", TypeInt* => Name " << name << ", int, Value " << static_cast<int>(setting) << std::endl;
-        pMap.try_emplace(name, setting.operator int());
+        pMap.try_emplace(itemPath, value.template get<double>());
+        // std::cout << "GetParametersTo(): Emplaced double " << itemPath << " = " << pMap.at(itemPath).ToString() << std::endl;
       }
       break;
-      case libconfig::Setting::TypeFloat:
+      case nlohmann::json::value_t::number_integer:
+      case nlohmann::json::value_t::number_unsigned:
       {
-        // std::cout << "Setting " << setting.getPath() << ", TypeFloat => Name " << name << ", double, Value " << static_cast<double>(setting) << std::endl;
-        pMap.try_emplace(name, setting.operator double());
+        pMap.try_emplace(itemPath, value.template get<int>());
+        // std::cout << "GetParametersTo(): Emplaced int " << itemPath << " = " << pMap.at(itemPath).ToString() << std::endl;
       }
       break;
-      case libconfig::Setting::TypeString:
+      case nlohmann::json::value_t::object:
       {
-        // std::cout << "Setting " << setting.getPath() << ", TypeString => Name " << name << ", string, Value " << static_cast<std::string>(setting) << std::endl;
-        pMap.try_emplace(name, setting.operator std::string());
+        // std::cout << "GetParametersTo(): Recursing into " << itemPath << std::endl;
+        GetParametersTo(pMap, value, itemPath + ".");
       }
       break;
-      case libconfig::Setting::TypeBoolean:
+      case nlohmann::json::value_t::string:
       {
-        // std::cout << "Setting " << setting.getPath() << ", TypeBoolean => Name " << name << ", bool, Value " << static_cast<bool>(setting) << std::endl;
-        pMap.try_emplace(name, setting.operator bool());
+        pMap.try_emplace(itemPath, value.template get<std::string>());
+        // std::cout << "GetParametersTo(): Emplaced string " << itemPath << " = " << pMap.at(itemPath).ToString() << std::endl;
       }
       break;
-      case libconfig::Setting::TypeGroup:
+      default:
       {
-        // std::cout << "Recursing " << setting.getPath() << ", TypeGroup => Prefix " << name << "." << std::endl;
-        // perform a recursive call to process group's sub-settings
-        GetParameters(pMap, cfg, setting.getPath(), name + ".");
+        std::cout << "WARNING: Ignoring JSON itemPath='" << itemPath << "' with unsupported type" << std::endl;
       }
-      break;
-      case libconfig::Setting::TypeArray:
-      case libconfig::Setting::TypeList:
-      {
-        throw std::invalid_argument(
-          std::string("Unsupported type for setting: ") + setting.getPath()
-        );
-      }
-      break;
     }
   }
 }
 }
-
 namespace rustLaunchSite
 {
 Config::Config(std::filesystem::path configFile)
 {
   configFile.make_preferred();
-  // attempt to parse configFile via libconfig
-  libconfig::Config cfg;
+  // attempt to parse configFile via nlohmann/json
+  nlohmann::json j{};
   try
   {
-    cfg.readFile(configFile.string());
+    j = nlohmann::json::parse(std::ifstream{configFile}, nullptr, true, true);
   }
-  catch (const libconfig::FileIOException& e)
-  {
-    throw std::invalid_argument(
-      std::string("Exception reading config file '") + configFile.string() + "': "
-      + e.what()
-    );
-  }
-  catch (const libconfig::ParseException& e)
+  catch (const nlohmann::json::parse_error& e)
   {
     std::stringstream s;
-    s << e.getLine();
+    s << e.byte;
     throw std::invalid_argument(
-      std::string("Parse failure at ") + e.getFile() + ":" + s.str() + ": "
-      + e.getError()
+      std::string("JSON parsing exception at byte ") + s.str()
+      + " of config file '" + configFile.string() + "': " + e.what()
+    );
+  }
+  catch (const nlohmann::json::exception& e)
+  {
+    throw std::invalid_argument(
+      std::string("JSON general exception while parsing config file '")
+      + configFile.string() + "': " + e.what()
+    );
+  }
+  catch (const std::exception& e)
+  {
+    throw std::invalid_argument(
+      std::string("C++ general exception while parsing config file '")
+      + configFile.string() + "': " + e.what()
+    );
+  }
+  catch (...)
+  {
+    throw std::invalid_argument(
+      std::string("Unknown exception while parsing config file '")
+      + configFile.string() + "'"
     );
   }
   // at this point the parse has succeeded
@@ -114,165 +152,210 @@ Config::Config(std::filesystem::path configFile)
   try
   {
     // *** rustLaunchSite settings ***
+    const auto& jRls{j.at("rustLaunchSite")};
 
     // just look up required settings
     // if they don't exist, an exception will be thrown
 
     // install
-    installPath_ = cfg.lookup("rustLaunchSite.install.path").c_str();
+    const auto& jRlsInstall{jRls.at("install")};
+    jRlsInstall.at("path").get_to(installPath_);
     installPath_.make_preferred();
-    installIdentity_ = cfg.lookup("rustLaunchSite.install.identity").c_str();
+    jRlsInstall.at("identity").get_to(installIdentity_);
 
     // paths
-    pathsCache_ = cfg.lookup("rustLaunchSite.paths.cache").c_str();
+    const auto& jRlsPaths{jRls.at("paths")};
+    jRlsPaths.at("cache").get_to(pathsCache_);
     pathsCache_.make_preferred();
-    pathsDownload_ = cfg.lookup("rustLaunchSite.paths.download").c_str();
+    jRlsPaths.at("download").get_to(pathsDownload_);
     pathsDownload_.make_preferred();
 
     // process
-    processAutoRestart_ = (
-      cfg.exists("rustLaunchSite.process.autoRestart")
-      && cfg.lookup("rustLaunchSite.process.autoRestart")
-    );
-    // default optional integer to zero
-    processShutdownDelaySeconds_ = 0;
-    if (cfg.exists("rustLaunchSite.process.shutdownDelaySeconds"))
+    if (jRls.contains("process"))
     {
-      processShutdownDelaySeconds_ = cfg.lookup("rustLaunchSite.process.shutdownDelaySeconds");
+      const auto& jRlsProcess{jRls.at("process")};
+      GetOptionalValueTo(processAutoRestart_, jRlsProcess, "autoRestart");
+      // default optional integer to zero
+      GetOptionalValueTo(
+        processShutdownDelaySeconds_, jRlsProcess, "shutdownDelaySeconds");
       // collapse other possible "disable" values to zero
-      if (processShutdownDelaySeconds_ < 0) { processShutdownDelaySeconds_ = 0; }
+      if (processShutdownDelaySeconds_ < 0)
+      {
+        processShutdownDelaySeconds_ = 0;
+      }
     }
 
     // rcon
-    rconPassword_ = cfg.lookup("rustLaunchSite.rcon.password").c_str();
-    rconIP_ = cfg.lookup("rustLaunchSite.rcon.ip").c_str();
-    rconPort_ = cfg.lookup("rustLaunchSite.rcon.port");
-    // check for optional settings existence before looking up
-    // bools that default to false can just "and" together the existence and
-    //  value
-    rconPassthroughIP_ = (
-      cfg.exists("rustLaunchSite.rcon.passthrough.ip")
-      && cfg.lookup("rustLaunchSite.rcon.passthrough.ip")
-    );
-    rconPassthroughPort_ = (
-      cfg.exists("rustLaunchSite.rcon.passthrough.port")
-      && cfg.lookup("rustLaunchSite.rcon.passthrough.port")
-    );
-    rconLog_ = (
-      cfg.exists("rustLaunchSite.rcon.log")
-      && cfg.lookup("rustLaunchSite.rcon.log")
-    );
+    const auto& jRlsRcon{jRls.at("rcon")};
+    jRlsRcon.at("password").get_to(rconPassword_);
+    jRlsRcon.at("ip").get_to(rconIP_);
+    jRlsRcon.at("port").get_to(rconPort_);
+    if (jRlsRcon.contains("passthrough"))
+    {
+      const auto& jRlsRconPassthrough{jRlsRcon.at("passthrough")};
+      GetOptionalValueTo(rconPassthroughIP_, jRlsRconPassthrough, "ip");
+      GetOptionalValueTo(rconPassthroughPort_, jRlsRconPassthrough, "port");
+    }
+    GetOptionalValueTo(rconLog_, jRlsRcon, "log");
 
     // seed
-    // string that needs to be converted to an enum
-    seedStrategy_ = SeedStrategy::RANDOM;
-    if (cfg.exists("rustLaunchSite.seed.strategy"))
+    if (jRls.contains("seed"))
     {
-      const std::string& seedStrategy(cfg.lookup("rustLaunchSite.seed.strategy"));
+      const auto& jRlsSeed{jRls.at("seed")};
+      // string that needs to be converted to an enum
+      seedStrategy_ = SeedStrategy::RANDOM;
+      const auto& seedStrategy{
+        GetOptionalValue<std::string>(jRlsSeed, "strategy")};
       if (seedStrategy == "fixed") { seedStrategy_ = SeedStrategy::FIXED; }
       else if (seedStrategy == "list") { seedStrategy_ = SeedStrategy::LIST; }
       else if (seedStrategy == "random") { seedStrategy_ = SeedStrategy::RANDOM; }
-      else
+      else if (!seedStrategy.empty())
       {
         throw std::invalid_argument(
           std::string("Invalid rustLaunchSite.seed.strategy value: ")
           + seedStrategy
         );
       }
-    }
-    // supplemental settings may be required depending on seed strategy
-    seedFixed_ = 0;
-    switch (seedStrategy_)
-    {
-      case SeedStrategy::FIXED:
+      // supplemental settings may be required depending on seed strategy
+      switch (seedStrategy_)
       {
-        seedFixed_ = cfg.lookup("rustLaunchSite.seed.fixed");
-      }
-      break;
-      case SeedStrategy::LIST:
-      {
-        const auto& list(cfg.lookup("rustLaunchSite.seed.list"));
-        const int listLength(list.getLength());
-        if (listLength < 1)
+        case SeedStrategy::FIXED:
         {
-          throw std::invalid_argument(
-            "Invalid rustLaunchSite.seed.list array"
-          );
+          jRlsSeed.at("fixed").get_to(seedFixed_);
         }
-        seedList_.reserve(listLength);
-        for (int i(0); i < listLength; ++i) { seedList_.push_back(list[i]); }
+        break;
+        case SeedStrategy::LIST:
+        {
+          jRlsSeed.at("list").get_to(seedList_);
+          if (seedList_.empty())
+          {
+            throw std::invalid_argument(
+              "Invalid rustLaunchSite.seed.list array");
+          }
+        }
+        break;
+        case SeedStrategy::RANDOM:
+        {
+          // no supplemental settings
+        }
+        break;
       }
-      break;
-      case SeedStrategy::RANDOM:
-      {
-        // no supplemental settings
-      }
-      break;
     }
 
     // update
-    updateOnLaunch_ = (
-      cfg.exists("rustLaunchSite.update.onLaunch")
-      && cfg.lookup("rustLaunchSite.update.onLaunch")
-    );
-    updateServer_ = (
-      cfg.exists("rustLaunchSite.update.server")
-      && cfg.lookup("rustLaunchSite.update.server")
-    );
-    updateModFramework_ = ModFramework::NONE;
-    if (cfg.exists("rustLaunchSite.update.modFramework"))
+    if (jRls.contains("update"))
     {
-      const std::string& updateModFramework(cfg.lookup("rustLaunchSite.update.modFramework"));
-      if (updateModFramework == "carbon")
+      const auto& jRlsUpdate{jRls.at("update")};
+      //  server
+      if (jRlsUpdate.contains("server"))
       {
-        updateModFramework_ = ModFramework::CARBON;
+        const auto& jRlsUpdateServer{jRlsUpdate.at("server")};
+        GetOptionalValueTo(
+          updateServerOnInterval_, jRlsUpdateServer, "onInterval");
+        GetOptionalValueTo(
+          updateServerOnRelaunch_, jRlsUpdateServer, "onRelaunch");
+        GetOptionalValueTo(
+          updateServerOnStartup_, jRlsUpdateServer, "onStartup");
       }
-      else if (updateModFramework == "oxide")
+      //  modFramework
+      if (jRlsUpdate.contains("modFramework"))
       {
-        updateModFramework_ = ModFramework::OXIDE;
+        const auto& jRlsUpdateModFramework{jRlsUpdate.at("modFramework")};
+        // process type first, because we want to force other values to false if
+        //  it does not resolve to a valid value
+        const auto& modFrameworkType{GetOptionalValue<std::string>(
+          jRlsUpdateModFramework, "type")};
+        if ("carbon" == modFrameworkType)
+        {
+          updateModFrameworkType_ = ModFrameworkType::CARBON;
+        }
+        else if ("oxide" == modFrameworkType)
+        {
+          updateModFrameworkType_ = ModFrameworkType::OXIDE;
+        }
+        else if (!modFrameworkType.empty())
+        {
+          std::cout << "WARNING: Ignoring unsupported modFramework.type value: '" << modFrameworkType << "'" << std::endl;
+        }
+        if (updateModFrameworkType_ != ModFrameworkType::NONE)
+        {
+          GetOptionalValueTo(updateModFrameworkOnInterval_,
+            jRlsUpdateModFramework, "onInterval");
+          GetOptionalValueTo(updateModFrameworkOnRelaunch_,
+            jRlsUpdateModFramework, "onRelaunch");
+          GetOptionalValueTo(updateModFrameworkOnServerUpdate_,
+            jRlsUpdateModFramework, "onServerUpdate");
+          GetOptionalValueTo(updateModFrameworkOnStartup_,
+            jRlsUpdateModFramework, "onStartup");
+        }
       }
-      else
-      {
-        std::cout << "WARNING: Ignoring unsupported modFramework value: '" << updateModFramework << "'" << std::endl;
-      }
-    }
-    updateIntervalMinutes_ = 0;
-    if (cfg.exists("rustLaunchSite.update.intervalMinutes"))
-    {
-      updateIntervalMinutes_ = cfg.lookup("rustLaunchSite.update.intervalMinutes");
+      GetOptionalValueTo(updateIntervalMinutes_, jRlsUpdate, "intervalMinutes");
+      // enforce validity & consistency here, to simplify dependent logic
       if (updateIntervalMinutes_ < 0)
       {
-        std::cout << "WARNING: Ignoring negative intervalMinutes value: '" << updateIntervalMinutes_ << "'" << std::endl;
         updateIntervalMinutes_ = 0;
+      }
+      else if (updateIntervalMinutes_
+        && !updateServerOnInterval_ && !updateModFrameworkOnInterval_)
+      {
+        std::cout << "WARNING: Ignoring update.intervalMinutes value because update.server and update.modFramework onInterval are both false: '" << updateIntervalMinutes_ << "'" << std::endl;
+        updateIntervalMinutes_ = 0;
+      }
+      if (!updateIntervalMinutes_)
+      {
+        if (updateServerOnInterval_)
+        {
+          std::cout << "WARNING: Ignoring update.server.onInterval=true because update.intervalMinutes=0" << std::endl;
+          updateServerOnInterval_ = false;
+        }
+        if (updateModFrameworkOnInterval_)
+        {
+          std::cout << "WARNING: Ignoring update.modFramework.onInterval=true because update.intervalMinutes=0" << std::endl;
+          updateModFrameworkOnInterval_ = false;
+        }
       }
     }
 
     // wipe
-    wipeOnProtocolChange_ = (
-      cfg.exists("rustLaunchSite.wipe.onProtocolChange")
-      && cfg.lookup("rustLaunchSite.wipe.onProtocolChange")
-    );
-    wipeBlueprints_ = (
-      cfg.exists("rustLaunchSite.wipe.blueprints")
-      && cfg.lookup("rustLaunchSite.wipe.blueprints")
-    );
+    if (jRls.contains("wipe"))
+    {
+      const auto& jRlsWipe{jRls.at("wipe")};
+      GetOptionalValueTo(wipeOnProtocolChange_, jRlsWipe, "onProtocolChange");
+      GetOptionalValueTo(wipeBlueprints_, jRlsWipe, "blueprints");
+    }
 
     // *** rustDedicated settings ***
-
-    GetParameters(minusParams_, cfg, "rustDedicated.minusParams", "-");
-    GetParameters(plusParams_, cfg, "rustDedicated.plusParams", "+");
+    if (j.contains("rustDedicated"))
+    {
+      const auto& jRd{j.at("rustDedicated")};
+      if (jRd.contains("minusParams"))
+      {
+        GetParametersTo(minusParams_, jRd.at("minusParams"), "-");
+      }
+      if (jRd.contains("plusParams"))
+      {
+        GetParametersTo(plusParams_, jRd.at("plusParams"), "+");
+      }
+    }
   }
-  catch (const libconfig::SettingTypeException& e)
+  catch (const nlohmann::json::exception& e)
   {
     throw std::invalid_argument(
-      std::string("Config setting has unsupported type: ") + e.getPath()
+      std::string("JSON general exception while processing config data: ")
+      + e.what()
     );
   }
-  catch (const libconfig::SettingNotFoundException& e)
+  catch (const std::exception& e)
   {
     throw std::invalid_argument(
-      std::string("Required config setting not found: ") + e.getPath()
+      std::string("C++ general exception while processing config data: ")
+      + e.what()
     );
+  }
+  catch (...)
+  {
+    throw std::invalid_argument(
+      "Unknown exception while processing config data");
   }
 }
 }

@@ -12,23 +12,16 @@ namespace rustLaunchSite
 class Config;
 class Downloader;
 
-/// @brief Rust server and Carbon/Oxide plugin framework updater facility
+/// @brief Rust server and Carbon/Oxide modding framework updater facility
 /// @details Implements all facilities and logic relating to checking for,
 ///  downloading, and installing updates for the Rust dedicated server and
-///  Carbon/Oxide plugin framework software, based on rustLaunchSite's
+///  Carbon/Oxide modding framework software, based on rustLaunchSite's
 ///  application configuration. Does *not* implement periodic update checking,
 ///  server (re)starts, etc. Only the constructor should throw exceptions.
 /// @todo Support non-release builds of Carbon/Oxide?
-/// @todo Collapse Carbon/Oxide facilities as much as possible?
 class Updater
 {
 public:
-
-  /// @brief Enum for specifying which plugin framework to manage
-  enum class PluginFramework
-  {
-    NONE, CARBON, OXIDE
-  };
 
   /// @brief Primary constructor
   /// @details Reads relevant config settings into member variables. Validates
@@ -47,33 +40,34 @@ public:
   );
 
   /// @brief Destructor
-  /// @details Stops periodic update check thread if it's running.
   virtual ~Updater();
 
-  /// @brief Check whether Carbon/Oxide update is available
+  /// @brief Check whether an update is available for the configured modding
+  ///  framework (i.e. Carbon/Oxide)
   /// @details This can be called regardless of server state, except maybe when
-  ///  an update is being installed.
-  /// @return @c true if Carbon/Oxide update available, @c false if no update
-  ///  available or Carbon/Oxide update checking disabled
+  ///  an update is being installed. Does nothing if no modding framework is
+  ///  configured, or configuration was deemed unusable.
+  /// @return Boolean indication of whether a modding framework update is
+  ///  available, or @c false if check skipped due to configuration
   bool CheckFramework() const;
 
   /// @brief Check whether Rust dedicated server update is available
   /// @details This can be called regardless of server state, except maybe when
-  ///  an update is being installed.
-  /// @return @c true if server update available, @c false if no update
-  ///  available or server update checking disabled
+  ///  an update is being installed. Will check regardless of configuration
+  ///  options, so it is up to the caller to enforce these.
+  /// @return Boolean indication of whether a server update is available
   bool CheckServer() const;
 
-  /// @brief Download and install latest Carbon/Oxide release
+  /// @brief Download and install latest configured modding framework release
   /// @details Verifies download and then overwrites current install. Caller is
   ///  responsible for determining whether this is actually warranted, as well
-  ///  as for ensuring the server is not running. Logs a warning if a
-  ///  Carbon/Oxide install was not detected at startup, unless
-  ///  @c suppressWarning is set to @c true
+  ///  as for ensuring the server is not running. Logs a warning if an
+  ///  installation of the configured modding framework was not detected at
+  ///  startup, unless @c suppressWarning is set to @c true.
   /// @param suppressWarning @c false (default) if a warning should be logged
-  ///  when called and no preexisting Carbon/Oxide installation was detected, or
-  ///  @c true to suppress the warning (NOTE: Carbon/Oxide still won't be
-  ///  updated in this case)
+  ///  when called and no preexisting modding framework installation was
+  ///  detected, or @c true to suppress the warning (NOTE: Carbon/Oxide still
+  ///  won't be updated in this case)
   void UpdateFramework(const bool suppressWarning = false) const;
 
   /// @brief Check for, install, and validate latest RustDedicated release
@@ -127,6 +121,8 @@ private:
   Updater(const Updater&) = delete;
   Updater& operator= (const Updater&) = delete;
 
+  // shared pointer to Config facility
+  std::shared_ptr<const Config> cfgSptr_;
   // shared pointer to Downloader facility
   std::shared_ptr<Downloader> downloaderSptr_;
   // server installation base path from rustLaunchSite configuration
@@ -135,18 +131,10 @@ private:
   std::filesystem::path appManifestPath_;
   // path to SteamCMD binary as reported by manifest file
   std::filesystem::path steamCmdPath_;
-  // directory in which Oxide downloads should be temporarily stored
+  // directory in which modding framework downloads should be temporarily stored
   std::filesystem::path downloadPath_;
-  // whether server update checks should be performed
-  // defaults to configuration file value, but disabled if necessary state does
-  //  not exist to support functionality
-  bool serverUpdateCheck_;
-  // whether/which Carbon/Oxide update checks should be performed
-  // defaults to configuration file value, but disabled if necessary state does
-  //  not exist to support functionality
-  PluginFramework frameworkUpdateCheck_= {PluginFramework::NONE};
-  // path to Carbon/Oxide plugin framework DLL derived from server install path
-  // may be empty if not installed, and/or plugin framework updating disabled
+  // path to Carbon/Oxide modding framework DLL derived from server install path
+  // may be empty if not installed, and/or modding framework updating disabled
   std::filesystem::path frameworkDllPath_;
 };
 }

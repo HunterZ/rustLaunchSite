@@ -185,7 +185,17 @@ Server::Server(std::shared_ptr<const Config> cfgSptr)
 
 Server::~Server()
 {
-  if (IsRunning()) { Stop("Unexpected server manager failure"); }
+  if (IsRunning())
+  {
+    try
+    {
+      Stop("Unexpected server manager failure");
+    }
+    catch (const std::exception& e)
+    {
+      std::cout << "WARNING: Caught exception while stopping server: " << e.what() << std::endl;
+    }
+  }
 }
 
 Server::Info Server::GetInfo()
@@ -352,6 +362,12 @@ bool Server::Start()
   else
   {
 */
+  // std::cout << "***** ARGS BEGIN:" << std::endl;
+  // for (const auto& arg : rustDedicatedArguments_)
+  // {
+  //   std::cout << "*****\t" << arg << std::endl;
+  // }
+  // std::cout << "***** ARGS END:" << std::endl;
   processImplUptr_->processUptr_ = std::make_unique<boost::process::child>(
     boost::process::exe(rustDedicatedPath_.string()),
     boost::process::args(rustDedicatedArguments_),
@@ -446,7 +462,7 @@ void Server::Stop(const std::string& reason)
     std::cout << "WARNING: Process library returned error code: " << errorCode.message() << std::endl;
   }
 
-  if (const int exitCode(process.exit_code()); exitCode)
+  if (const auto exitCode(process.exit_code()); exitCode)
   {
     std::cout << "WARNING: Server process returned nonzero exit code: " << exitCode << std::endl;
   }

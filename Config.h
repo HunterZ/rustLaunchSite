@@ -18,15 +18,9 @@ class Config
 {
 public:
 
-  enum class ModFramework
-  {
-    NONE, CARBON, OXIDE
-  };
+  enum class ModFrameworkType { NONE, CARBON, OXIDE };
 
-  enum class SeedStrategy
-  {
-    FIXED, LIST, RANDOM
-  };
+  enum class SeedStrategy { FIXED, LIST, RANDOM };
 
   struct Parameter
   {
@@ -86,84 +80,98 @@ public:
 
   // accessor methods for loaded settings
 
-  std::filesystem::path GetInstallPath()                 const
+  std::filesystem::path GetInstallPath()                      const
     { return installPath_; }
-  std::string           GetInstallIdentity()             const
+  std::string           GetInstallIdentity()                  const
     { return installIdentity_; }
-  std::filesystem::path GetPathsCache()                  const
+  std::filesystem::path GetPathsCache()                       const
     { return pathsCache_; }
-  std::filesystem::path GetPathsDownload()               const
+  std::filesystem::path GetPathsDownload()                    const
     { return pathsDownload_; }
-  bool                  GetProcessAutoRestart()          const
+  bool                  GetProcessAutoRestart()               const
     { return processAutoRestart_; }
-  int                   GetProcessShutdownDelaySeconds() const
+  int                   GetProcessShutdownDelaySeconds()      const
     { return processShutdownDelaySeconds_; }
-  std::string           GetRconPassword()                const
+  std::string           GetRconPassword()                     const
     { return rconPassword_; }
-  std::string           GetRconIP()                      const
+  std::string           GetRconIP()                           const
     { return rconIP_; }
-  int                   GetRconPort()                    const
+  int                   GetRconPort()                         const
     { return rconPort_; }
-  bool                  GetRconPassthroughIP()           const
+  bool                  GetRconPassthroughIP()                const
     { return rconPassthroughIP_; }
-  bool                  GetRconPassthroughPort()         const
+  bool                  GetRconPassthroughPort()              const
     { return rconPassthroughPort_; }
-  bool                  GetRconLog()                     const
+  bool                  GetRconLog()                          const
     { return rconLog_; }
-  SeedStrategy          GetSeedStrategy()                const
+  SeedStrategy          GetSeedStrategy()                     const
     { return seedStrategy_; }
-  int                   GetSeedFixed()                   const
+  int                   GetSeedFixed()                        const
     { return seedFixed_; }
-  std::vector<int>      GetSeedList()                    const
+  std::vector<int>      GetSeedList()                         const
     { return seedList_; }
-  bool                  GetUpdateOnLaunch()              const
-    { return updateOnLaunch_; }
-  bool                  GetUpdateServer()                const
-    { return updateServer_; }
-  ModFramework          GetUpdateModFramework()          const
-    { return updateModFramework_; }
-  int                   GetUpdateIntervalMinutes()       const
+  bool                  GetUpdateServerOnInterval()           const
+    { return updateServerOnInterval_; }
+  bool                  GetUpdateServerOnRelaunch()           const
+    { return updateServerOnRelaunch_; }
+  bool                  GetUpdateServerOnStartup()            const
+    { return updateServerOnStartup_; }
+  bool                  GetUpdateModFrameworkOnInterval()     const
+    { return updateModFrameworkOnInterval_; }
+  bool                  GetUpdateModFrameworkOnRelaunch()     const
+    { return updateModFrameworkOnRelaunch_; }
+  bool                  GetUpdateModFrameworkOnServerUpdate() const
+    { return updateModFrameworkOnServerUpdate_; }
+  bool                  GetUpdateModFrameworkOnStartup()      const
+    { return updateModFrameworkOnStartup_; }
+  ModFrameworkType      GetUpdateModFrameworkType()           const
+    { return updateModFrameworkType_; }
+  int                   GetUpdateIntervalMinutes()            const
     { return updateIntervalMinutes_; }
-  bool                  GetWipeOnProtocolChange()        const
+  bool                  GetWipeOnProtocolChange()             const
     { return wipeOnProtocolChange_; }
-  bool                  GetWipeBlueprints()              const
+  bool                  GetWipeBlueprints()                   const
     { return wipeBlueprints_; }
-
-  ParameterMapType      GetMinusParams()                 const
+  ParameterMapType      GetMinusParams()                      const
     { return minusParams_; }
-  ParameterMapType      GetPlusParams()                  const
+  ParameterMapType      GetPlusParams()                       const
     { return plusParams_; }
 
 private:
 
   // rustLaunchSite settings
 
-  std::filesystem::path installPath_;
-  std::string           installIdentity_;
-  std::filesystem::path pathsCache_;
-  std::filesystem::path pathsDownload_;
-  bool                  processAutoRestart_;
-  int                   processShutdownDelaySeconds_;
-  std::string           rconPassword_;
-  std::string           rconIP_;
-  int                   rconPort_;
-  bool                  rconPassthroughIP_;
-  bool                  rconPassthroughPort_;
-  bool                  rconLog_;
-  SeedStrategy          seedStrategy_;
-  int                   seedFixed_;
-  std::vector<int>      seedList_;
-  bool                  updateOnLaunch_;
-  bool                  updateServer_;
-  ModFramework          updateModFramework_;
-  int                   updateIntervalMinutes_;
-  bool                  wipeOnProtocolChange_;
-  bool                  wipeBlueprints_;
+  std::filesystem::path installPath_ = {};
+  std::string           installIdentity_ = {};
+  std::filesystem::path pathsCache_ = {};
+  std::filesystem::path pathsDownload_ = {};
+  bool                  processAutoRestart_ = {};
+  int                   processShutdownDelaySeconds_ = {};
+  std::string           rconPassword_ = {};
+  std::string           rconIP_ = {};
+  int                   rconPort_ = {};
+  bool                  rconPassthroughIP_ = {};
+  bool                  rconPassthroughPort_ = {};
+  bool                  rconLog_ = {};
+  SeedStrategy          seedStrategy_ = SeedStrategy::RANDOM;
+  int                   seedFixed_ = {};
+  std::vector<int>      seedList_ = {};
+  bool                  updateServerOnInterval_ = {};
+  bool                  updateServerOnRelaunch_ = {};
+  bool                  updateServerOnStartup_ = {};
+  bool                  updateModFrameworkOnInterval_ = {};
+  bool                  updateModFrameworkOnRelaunch_ = {};
+  bool                  updateModFrameworkOnServerUpdate_ = {};
+  bool                  updateModFrameworkOnStartup_ = {};
+  ModFrameworkType      updateModFrameworkType_ = ModFrameworkType::NONE;
+  int                   updateIntervalMinutes_ = {};
+  bool                  wipeOnProtocolChange_ = {};
+  bool                  wipeBlueprints_ = {};
 
   // dedicatedServer settings
 
-  ParameterMapType minusParams_;
-  ParameterMapType plusParams_;
+  ParameterMapType minusParams_ = {};
+  ParameterMapType plusParams_ = {};
 
   // disabled constructors/operators
 
