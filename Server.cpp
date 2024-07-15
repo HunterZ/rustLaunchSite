@@ -185,7 +185,17 @@ Server::Server(std::shared_ptr<const Config> cfgSptr)
 
 Server::~Server()
 {
-  if (IsRunning()) { Stop("Unexpected server manager failure"); }
+  if (IsRunning())
+  {
+    try
+    {
+      Stop("Unexpected server manager failure");
+    }
+    catch (const std::exception& e)
+    {
+      std::cout << "WARNING: Caught exception while stopping server: " << e.what() << std::endl;
+    }
+  }
 }
 
 Server::Info Server::GetInfo()
@@ -452,7 +462,7 @@ void Server::Stop(const std::string& reason)
     std::cout << "WARNING: Process library returned error code: " << errorCode.message() << std::endl;
   }
 
-  if (const int exitCode(process.exit_code()); exitCode)
+  if (const auto exitCode(process.exit_code()); exitCode)
   {
     std::cout << "WARNING: Server process returned nonzero exit code: " << exitCode << std::endl;
   }

@@ -13,6 +13,7 @@
         "strategy": "external"
       },
       "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "VCPKG_HOST_TRIPLET": "${presetName}",
         "VCPKG_TARGET_TRIPLET": "${presetName}"
       }

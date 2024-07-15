@@ -19,7 +19,6 @@ class Downloader;
 ///  application configuration. Does *not* implement periodic update checking,
 ///  server (re)starts, etc. Only the constructor should throw exceptions.
 /// @todo Support non-release builds of Carbon/Oxide?
-/// @todo Collapse Carbon/Oxide facilities as much as possible?
 class Updater
 {
 public:
