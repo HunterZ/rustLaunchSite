@@ -352,6 +352,12 @@ bool Server::Start()
   else
   {
 */
+  // std::cout << "***** ARGS BEGIN:" << std::endl;
+  // for (const auto& arg : rustDedicatedArguments_)
+  // {
+  //   std::cout << "*****\t" << arg << std::endl;
+  // }
+  // std::cout << "***** ARGS END:" << std::endl;
   processImplUptr_->processUptr_ = std::make_unique<boost::process::child>(
     boost::process::exe(rustDedicatedPath_.string()),
     boost::process::args(rustDedicatedArguments_),

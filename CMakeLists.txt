@@ -37,34 +37,7 @@ find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(kubazip CONFIG REQUIRED)
-find_package(libconfig CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
-
-# vcpkg libconfig provides inconsistently named targets, so try to sort it out
-set(LIBCONFIG_CPP_TARGET "${LIBCONFIG_CPP_TARGET}")
-foreach(RLS_LCPPT "${LIBCONFIG_CPP_TARGET}" "libconfig::config++" "libconfig::libconfig++" "libconfig++" "config++")
-  if(TARGET "${RLS_LCPPT}")
-    set(LIBCONFIG_CPP_TARGET "${RLS_LCPPT}")
-    break()
-  endif()
-endforeach()
-if(TARGET "${LIBCONFIG_CPP_TARGET}")
-  message("RLS: Found libconfig++ target name: ${LIBCONFIG_CPP_TARGET}")
-else()
-  message(ERROR "RLS: Failed to determine libconfig++ target name")
-endif()
-set(LIBCONFIG_C_TARGET "${LIBCONFIG_C_TARGET}")
-foreach(RLS_LCT "${LIBCONFIG_C_TARGET}" "libconfig::config" "libconfig::libconfig" "libconfig" "config")
-  if(TARGET "${RLS_LCT}")
-    set(LIBCONFIG_C_TARGET "${RLS_LCT}")
-    break()
-  endif()
-endforeach()
-if(TARGET "${LIBCONFIG_C_TARGET}")
-  message("RLS: Found libconfig target name: ${LIBCONFIG_C_TARGET}")
-else()
-  message(ERROR "RLS: Failed to determine libconfig target name")
-endif()
 
 # build ctrl-c library (as static for simplicity)
 add_library(ctrl-c STATIC
@@ -98,8 +71,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   CURL::libcurl
   ixwebsocket::ixwebsocket
   kubazip::kubazip
-  "${LIBCONFIG_CPP_TARGET}"
-  "${LIBCONFIG_C_TARGET}"
   nlohmann_json::nlohmann_json
 )
 target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
@@ -174,7 +145,7 @@ endif()
 
 install(TARGETS ${PROJECT_NAME})
 install(
-  FILES example.cfg
+  FILES exampleConfig.jsonc
   TYPE DATA
 )
 install(

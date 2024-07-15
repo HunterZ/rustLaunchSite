@@ -19,7 +19,7 @@ RLS must be run with elevated permissions ("Run As Administrator" on Windows) be
 
 RLS supports being run as a service (e.g. via NSSM/WinSW on Windows), as it attemps an orderly server and application shutdown on receipt of Ctrl+C. This also means clean nightly restarts can be triggered via an OS task scheduler job that restarts the service.
 
-RLS requires a single command line parameter: A path to an RLS configuration file. An example file (`example.cfg`) is included, which is heavily commented to help you figure things out.
+RLS requires a single command line parameter: A path to an RLS configuration file. An example file (`exampleConfig.jsonc`) is included, which is heavily commented to help you figure things out.
 
 RLS currently only logs to the standard console output. This can be redirected to a file.
 
@@ -36,7 +36,6 @@ RLS currently has the following FOSS library dependencies without modifications,
 - Ctrl+C
 - ixwebsocket
 - kubazip
-- libconfig
 - libcurl
 - nlohmann_json
 

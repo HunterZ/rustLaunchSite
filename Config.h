@@ -18,15 +18,9 @@ class Config
 {
 public:
 
-  enum class ModFrameworkType
-  {
-    NONE, CARBON, OXIDE
-  };
+  enum class ModFrameworkType { NONE, CARBON, OXIDE };
 
-  enum class SeedStrategy
-  {
-    FIXED, LIST, RANDOM
-  };
+  enum class SeedStrategy { FIXED, LIST, RANDOM };
 
   struct Parameter
   {
@@ -147,37 +141,37 @@ private:
 
   // rustLaunchSite settings
 
-  std::filesystem::path installPath_;
-  std::string           installIdentity_;
-  std::filesystem::path pathsCache_;
-  std::filesystem::path pathsDownload_;
-  bool                  processAutoRestart_;
-  int                   processShutdownDelaySeconds_;
-  std::string           rconPassword_;
-  std::string           rconIP_;
-  int                   rconPort_;
-  bool                  rconPassthroughIP_;
-  bool                  rconPassthroughPort_;
-  bool                  rconLog_;
-  SeedStrategy          seedStrategy_;
-  int                   seedFixed_;
-  std::vector<int>      seedList_;
-  bool                  updateServerOnInterval_;
-  bool                  updateServerOnRelaunch_;
-  bool                  updateServerOnStartup_;
-  bool                  updateModFrameworkOnInterval_;
-  bool                  updateModFrameworkOnRelaunch_;
-  bool                  updateModFrameworkOnServerUpdate_;
-  bool                  updateModFrameworkOnStartup_;
-  ModFrameworkType      updateModFrameworkType_;
-  int                   updateIntervalMinutes_;
-  bool                  wipeOnProtocolChange_;
-  bool                  wipeBlueprints_;
+  std::filesystem::path installPath_ = {};
+  std::string           installIdentity_ = {};
+  std::filesystem::path pathsCache_ = {};
+  std::filesystem::path pathsDownload_ = {};
+  bool                  processAutoRestart_ = {};
+  int                   processShutdownDelaySeconds_ = {};
+  std::string           rconPassword_ = {};
+  std::string           rconIP_ = {};
+  int                   rconPort_ = {};
+  bool                  rconPassthroughIP_ = {};
+  bool                  rconPassthroughPort_ = {};
+  bool                  rconLog_ = {};
+  SeedStrategy          seedStrategy_ = SeedStrategy::RANDOM;
+  int                   seedFixed_ = {};
+  std::vector<int>      seedList_ = {};
+  bool                  updateServerOnInterval_ = {};
+  bool                  updateServerOnRelaunch_ = {};
+  bool                  updateServerOnStartup_ = {};
+  bool                  updateModFrameworkOnInterval_ = {};
+  bool                  updateModFrameworkOnRelaunch_ = {};
+  bool                  updateModFrameworkOnServerUpdate_ = {};
+  bool                  updateModFrameworkOnStartup_ = {};
+  ModFrameworkType      updateModFrameworkType_ = ModFrameworkType::NONE;
+  int                   updateIntervalMinutes_ = {};
+  bool                  wipeOnProtocolChange_ = {};
+  bool                  wipeBlueprints_ = {};
 
   // dedicatedServer settings
 
-  ParameterMapType minusParams_;
-  ParameterMapType plusParams_;
+  ParameterMapType minusParams_ = {};
+  ParameterMapType plusParams_ = {};
 
   // disabled constructors/operators
 
