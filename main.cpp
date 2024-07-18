@@ -192,16 +192,25 @@ std::pair<bool, bool> UpdateCheck(
 
 // wrapper around Updater::UpdateFramework() to loop until update succeeds
 void UpdateFramework(
-  const rustLaunchSite::Updater& updater, const bool suppressWarning = false)
+  const rustLaunchSite::Updater& updater,
+  const int retryDelaySeconds = 0, const bool suppressWarning = false)
 {
   std::cout << "rustLaunchSite: Entering plugin framework update loop" << std::endl;
   bool firstTry{true};
-  // TODO: add a sleep and/or maximum try count?
   for(bool update{true}; update; update = updater.CheckFramework())
   {
     if (!firstTry)
     {
-      std::cout << "rustLaunchSite: WARNING: Detected plugin framework version mismatch after update attempt; trying again..." << std::endl;
+      std::cout << "rustLaunchSite: WARNING: Detected plugin framework version mismatch after update attempt; ";
+      if (retryDelaySeconds > 0)
+      {
+        std::cout << "waiting for " << retryDelaySeconds << " second(s) and then trying again..." << std::endl;
+        std::this_thread::sleep_for(std::chrono::seconds(retryDelaySeconds));
+      }
+      else
+      {
+        std::cout << "trying again..." << std::endl;
+      }
     }
 
     updater.UpdateFramework(suppressWarning);
@@ -212,16 +221,26 @@ void UpdateFramework(
 }
 
 // wrapper around Updater::UpdateServer() to loop until update succeeds
-void UpdateServer(const rustLaunchSite::Updater& updater)
+void UpdateServer(
+  const rustLaunchSite::Updater& updater,
+  const int retryDelaySeconds = 0)
 {
   std::cout << "rustLaunchSite: Entering server update loop" << std::endl;
   bool firstTry{true};
-  // TODO: add a sleep and/or maximum try count?
   for(bool update{true}; update; update = updater.CheckServer())
   {
     if (!firstTry)
     {
-      std::cout << "rustLaunchSite: WARNING: Detected server version mismatch after update attempt; trying again..." << std::endl;
+      std::cout << "rustLaunchSite: WARNING: Detected server version mismatch after update attempt; " << std::endl;
+      if (retryDelaySeconds > 0)
+      {
+        std::cout << "waiting for " << retryDelaySeconds << " second(s) and then trying again..." << std::endl;
+        std::this_thread::sleep_for(std::chrono::seconds(retryDelaySeconds));
+      }
+      else
+      {
+        std::cout << "trying again..." << std::endl;
+      }
     }
 
     updater.UpdateServer();
@@ -280,11 +299,15 @@ int main(int argc, char* argv[])
       ;
       if (updateServerOnStartup)
       {
-        UpdateServer(*updaterUptr);
+        UpdateServer(
+          *updaterUptr, configSptr->GetUpdateServerRetryDelaySeconds());
       }
       if (updateModFrameworkOnStartup)
       {
-        UpdateFramework(*updaterUptr, updateServerOnStartup);
+        UpdateFramework(
+          *updaterUptr
+        , configSptr->GetUpdateModFrameworkRetryDelaySeconds()
+        , updateServerOnStartup);
       }
     }
 
@@ -368,11 +391,15 @@ int main(int argc, char* argv[])
           serverUptr->Stop("Installing updates");
           if (updateServerOnInterval)
           {
-            UpdateServer(*updaterUptr);
+            UpdateServer(
+              *updaterUptr, configSptr->GetUpdateServerRetryDelaySeconds());
           }
           if (updateModFrameworkOnInterval)
           {
-            UpdateFramework(*updaterUptr, updateServerOnInterval);
+            UpdateFramework(
+              *updaterUptr
+            , configSptr->GetUpdateModFrameworkRetryDelaySeconds()
+            , updateServerOnInterval);
           }
           std::cout << "rustLaunchSite: Update(s) complete; starting server" << std::endl;
           if (!serverUptr->Start())
@@ -431,11 +458,15 @@ int main(int argc, char* argv[])
           ;
           if (updateServerOnRelaunch)
           {
-            UpdateServer(*updaterUptr);
+            UpdateServer(
+              *updaterUptr, configSptr->GetUpdateServerRetryDelaySeconds());
           }
           if (updateModFrameworkOnRelaunch)
           {
-            UpdateFramework(*updaterUptr, updateServerOnRelaunch);
+            UpdateFramework(
+              *updaterUptr
+            , configSptr->GetUpdateModFrameworkRetryDelaySeconds()
+            , updateServerOnRelaunch);
           }
           // relaunch server
           std::cout << "rustLaunchSite: Relaunching server" << std::endl;
