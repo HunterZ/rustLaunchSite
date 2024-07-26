@@ -202,7 +202,13 @@
         // NOTE: Recommend keeping this enabled, especially if you are
         //  performing daily server restarts by restarting rustLaunchSite, and
         //  only want to check for updates once per day.
-        "onStartup": true
+        "onStartup": true,
+        // Optional integer: If positive, update processing will wait this long
+        //  after a failure before trying again; else retries will immediately
+        //  occur.
+        // NOTE: It is recommended to set this to a reasonable value to avoid
+        //  flooding Steam with download requests!
+        "retryDelaySeconds": 60
       },
       // Optional group: Modding framework (i.e. Carbon or Oxide) update
       //  settings if omitted, modding framework update features will be
@@ -248,6 +254,12 @@
         //  performing daily server restarts by restarting rustLaunchSite, and
         //  only want to check for updates once per day.
         "onStartup": true,
+        // Optional integer: If positive, update processing will wait this long
+        //  after a failure before trying again; else retries will immediately
+        //  occur.
+        // NOTE: It is recommended to set this to a reasonable value to avoid
+        //  flooding Carbon/Oxide hosting with download requests!
+        "retryDelaySeconds": 60,
         // Optional string: Type of modding framework to keep updated; if
         //  ommitted or empty (""), mod framework updating will be disabled with
         //  no warning.
@@ -358,6 +370,8 @@
         "level": "Procedural Map",
         // map size.
         "worldsize": 4500,
+        // URL of custom map (mutually exclusive with `level` and `worldsize` parameters?)
+        // "levelurl": "https://my.cool.website/url.map",
         // maximum concurrent player connections allowed.
         "maxplayers": 50,
         // server name advertised to game clients.
@@ -365,21 +379,29 @@
         // server details advertised to game clients.
         "description": "This is a pretty cool server",
         // server web site URL advertised to game clients.
-        "url": "http://my.cool.server",
+        "url": "https://my.cool.website",
         // server banner image advertised to game clients.
-        "headerimage": "http://my.cool.server/image.jpg",
+        "headerimage": "https://my.cool.website/image.jpg",
         // number of updates sent to each player every second.
         // "tickrate": 10,
         // number of seconds between state saves to disk.
         // "saveinterval": 600,
         // message displayed to clients on session start.
+        // TODO: this doesn't seem to override existing values?
         "motd": "Welcome to my cool server",
         // log F7 reports locally.
         "printReportsToConsole": 1,
         // server browser tags to advertise - see facepunch wiki.
-        "tags": "monthly,vanilla,NA",
-        // game mode - see facepunch wiki.
-        "gamemode": "vanilla"
+        "tags": "biweekly,vanilla,NA,tut",
+        // game mode - see facepunch wiki at https://wiki.facepunch.com/rust/server-gamemodes
+        // DO NOT USE for vanilla!
+        // gamemode: "hardcore",
+        // whether to enable Tutorial Island support (be sure to test if you run mods!)
+        "tutorialenabled": 1,
+        // domain-based client favorites support - see https://wiki.facepunch.com/rust/dns-records
+        "favoritesEndpoint": "my.cool.server",
+        // server logo (to display in server browser, overlaid on top of headerimage) - see https://wiki.facepunch.com/rust/custom-server-icon
+        "logoimage": "https://my.cool.website/image.png"
       },
       // Optional group: RCON parameters, prefixed with `+rcon.`.
       // NOTE: These will be overridden by rustLaunchSite's own RCON
@@ -413,6 +435,12 @@
       {
         // Population active on the server, per square km (default 3).
         // "population": 0
+      },
+      // Optional group; custom server FPS settings
+      "fps":
+      {
+        // Limit server FPS to this value (saves CPU power)
+        "limit": 60
       },
       // Optional group; enable halloween NPCs.
       "halloween":

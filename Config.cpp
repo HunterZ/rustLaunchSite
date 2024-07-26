@@ -256,6 +256,14 @@ Config::Config(std::filesystem::path configFile)
           updateServerOnRelaunch_, jRlsUpdateServer, "onRelaunch");
         GetOptionalValueTo(
           updateServerOnStartup_, jRlsUpdateServer, "onStartup");
+        GetOptionalValueTo(
+          updateServerRetryDelaySeconds_, jRlsUpdateServer,
+          "updateServerRetryDelaySeconds"
+        );
+        if (updateServerRetryDelaySeconds_ < 0)
+        {
+          updateServerRetryDelaySeconds_ = 0;
+        }
       }
       //  modFramework
       if (jRlsUpdate.contains("modFramework"))
@@ -287,6 +295,14 @@ Config::Config(std::filesystem::path configFile)
             jRlsUpdateModFramework, "onServerUpdate");
           GetOptionalValueTo(updateModFrameworkOnStartup_,
             jRlsUpdateModFramework, "onStartup");
+          GetOptionalValueTo(
+            updateModFrameworkRetryDelaySeconds_, jRlsUpdateModFramework,
+            "updateModFrameworkRetryDelaySeconds"
+          );
+          if (updateModFrameworkRetryDelaySeconds_ < 0)
+          {
+            updateModFrameworkRetryDelaySeconds_ = 0;
+          }
         }
       }
       GetOptionalValueTo(updateIntervalMinutes_, jRlsUpdate, "intervalMinutes");
