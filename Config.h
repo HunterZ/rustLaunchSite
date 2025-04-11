@@ -110,6 +110,8 @@ public:
     { return seedFixed_; }
   std::vector<int>      GetSeedList()                            const
     { return seedList_; }
+  std::filesystem::path GetSteamcmdPath()                        const
+    { return steamcmdPath_; }
   bool                  GetUpdateServerOnInterval()              const
     { return updateServerOnInterval_; }
   bool                  GetUpdateServerOnRelaunch()              const
@@ -160,6 +162,7 @@ private:
   SeedStrategy          seedStrategy_ = SeedStrategy::RANDOM;
   int                   seedFixed_ = {};
   std::vector<int>      seedList_ = {};
+  std::filesystem::path steamcmdPath_ = {};
   bool                  updateServerOnInterval_ = {};
   bool                  updateServerOnRelaunch_ = {};
   bool                  updateServerOnStartup_ = {};

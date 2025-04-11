@@ -120,7 +120,7 @@
       },
       // Optional boolean: If true, received broadcast/non-response RCON
       //  messages will be logged for debugging purposes.
-      "log": true
+      "log": false
     },
     // Optional group: Map seed determination settings; if omitted, random seed
     //  generation will be used.
@@ -170,6 +170,14 @@
       //  the first one in the array as soon as possible (likely on next server
       //  (re)start).
       "list": [ 6956722, 29106779, 90753170 ]
+    },
+    // Required group: SteamCMD settings.
+    "steamcmd":
+    {
+      // Required string: Path to steamcmd binary.
+      // NOTE: Server version update features will be disabled if steamcmd is
+      //  not found at this path.
+      "path": "/usr/games/steamcmd"
     },
     // Optional group: Automatic update settings; if omitted, the contained
     //  settings will be considered disabled.

@@ -37,6 +37,7 @@ find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(kubazip CONFIG REQUIRED)
+find_package(LibArchive REQUIRED) # no config-mode file provided for this one
 find_package(nlohmann_json CONFIG REQUIRED)
 
 # build ctrl-c library (as static for simplicity)
@@ -71,6 +72,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   CURL::libcurl
   ixwebsocket::ixwebsocket
   kubazip::kubazip
+  LibArchive::LibArchive
   nlohmann_json::nlohmann_json
 )
 target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")

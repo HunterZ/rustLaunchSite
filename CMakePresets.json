@@ -4,7 +4,7 @@
     {
       "name": "ninja-multi-vcpkg",
       "hidden": true,
-      "generator": "Ninja Multi-Config",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -26,8 +26,16 @@
       }
     },
     {
+      "name": "x64-linux",
+      "description": "Linux x64 w/static linkage",
+      "inherits": [
+        "ninja-multi-vcpkg",
+        "static"
+      ]
+    },
+    {
       "name": "x64-mingw-static",
-      "description": "MinGW64 w/static linkage",
+      "description": "MinGW x64 w/static linkage",
       "inherits": [
         "ninja-multi-vcpkg",
         "static"
@@ -35,7 +43,7 @@
     },
     {
       "name": "x64-windows-static",
-      "description": "MSVC w/static linkage",
+      "description": "MSVC x64 w/static linkage",
       "inherits": [
         "ninja-multi-vcpkg",
         "static"
@@ -54,9 +62,25 @@
       "configuration": "Release"
     },
     {
+      "name": "x64-linux-static-debug",
+      "configurePreset": "x64-linux",
+      "description": "Linux x64 Debug w/static linkage",
+      "inherits": [
+        "Debug"
+      ]
+    },
+    {
+      "name": "x64-linux-static-release",
+      "configurePreset": "x64-linux",
+      "description": "Linux x64 Release w/static linkage",
+      "inherits": [
+        "Release"
+      ]
+    },
+    {
       "name": "x64-mingw-static-debug",
       "configurePreset": "x64-mingw-static",
-      "description": "MinGW64 Debug w/static linkage",
+      "description": "MinGW x64 Debug w/static linkage",
       "inherits": [
         "Debug"
       ]
@@ -64,7 +88,7 @@
     {
       "name": "x64-mingw-static-release",
       "configurePreset": "x64-mingw-static",
-      "description": "MinGW64 Release w/static linkage",
+      "description": "MinGW x64 Release w/static linkage",
       "inherits": [
         "Release"
       ]
@@ -72,7 +96,7 @@
     {
       "name": "x64-windows-static-debug",
       "configurePreset": "x64-windows-static",
-      "description": "MSVC Debug w/static linkage",
+      "description": "MSVC x64 Debug w/static linkage",
       "inherits": [
         "Debug"
       ]
@@ -80,7 +104,7 @@
     {
       "name": "x64-windows-static-release",
       "configurePreset": "x64-windows-static",
-      "description": "MSVC Release w/static linkage",
+      "description": "MSVC x64 Release w/static linkage",
       "inherits": [
         "Release"
       ]

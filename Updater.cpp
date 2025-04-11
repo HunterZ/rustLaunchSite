@@ -146,6 +146,125 @@ const std::vector<std::string_view> FRAMEWORK_URL
   "https://api.github.com/repos/OxideMod/Oxide.Rust/releases/latest"
 };
 
+void ExtractArchiveData(const std::vector<char>& zipData, std::string_view url, std::string_view frameworkTitle, const std::filesystem::path& serverInstallPath)
+{
+  std::cout << "***** TODO: Extract archive of length=" << zipData.size() << " downloaded from " << url << " containing framework=" << frameworkTitle << " to destination " << serverInstallPath << std::endl;
+}
+
+// unzip Carbon/Oxide release into server installation directory
+// TODO: port to libarchive so that we aren't carrying around two dependencies
+//  that do the same thing (kubazip doesn't do .tar.gz)
+void ExtractZipData(const std::vector<char>& zipData, std::string_view url, std::string_view frameworkTitle, const std::filesystem::path& serverInstallPath)
+{
+  // NOTE: both plugin frameworks currently release .zip files that are intended
+  //  to be extracted directly into the server installation root
+  //
+  // first, get the number of files in the zip
+  // TODO: use zip_stream_openwitherror() if vcpkg updates to newer kubazip
+  zip_t* zipPtr(zip_stream_open(zipData.data(), zipData.size(), 0, 'r'));
+  if (!zipPtr)
+  {
+    std::cout << "ERROR: Failed to open zip data with length=" << zipData.size() << " downloaded from URL " << url << "\n";
+    return;
+  }
+  const ssize_t zipEntries(zip_entries_total(zipPtr));
+  if (zipEntries <= 0)
+  {
+    std::cout << "ERROR: Failed to get valid file count from downloaded zip data with length=" << zipData.size() << ": " << zip_strerror(static_cast<int>(zipEntries)) << "\n";
+    zip_close(zipPtr);
+    return;
+  }
+  // loop over all zip entries
+  for (ssize_t i{0}; i < zipEntries; ++i)
+  {
+    if
+    (
+      const auto openResult{zip_entry_openbyindex(zipPtr, i)};
+      openResult
+    )
+    {
+      std::cout << "ERROR: Failed to open zip entry - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(openResult) << "\n";
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    std::string_view entryName{zip_entry_name(zipPtr)};
+    if (entryName.empty())
+    {
+      std::cout << "ERROR: Failed to determine zip entry name - " << frameworkTitle << " installation may now be corrupt!\n";
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    const int isDirStatus{zip_entry_isdir(zipPtr)};
+    if (isDirStatus < 0)
+    {
+      std::cout << "ERROR: Failed to determine zip entry '" << entryName << "' directory status - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(isDirStatus) << "\n";
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    // kubazip seems to always return isDir=0, even for obvious directory
+    //  entries whose names end in a slash, so add that to the heuristic
+    const bool isDir{isDirStatus != 0 || entryName.back() == '/' || entryName.back() == '\\'};
+    // calculate the full path relative to server installation
+    std::filesystem::path entryPath{(serverInstallPath / entryName).make_preferred()};
+    std::cout << "Extracting zip entry #" << i+1 << "/" << zipEntries << ": " << (isDir ? "Directory" : "File") << " '" << entryName << "' to '" << entryPath << "'\n";
+    // get the parent path if a file, or the full path if a dir
+    std::filesystem::path containingDir{isDir ? entryPath : entryPath.parent_path()};
+    // std::cout << "Creating path (unless it already exists): '" << containingDir << "'\n";
+    // create the directory tree
+    if
+    (
+      std::error_code ec{};
+      // false is returned if dir already exists, so need to check ec also
+      !std::filesystem::create_directories(containingDir, ec) && ec
+    )
+    {
+      std::cout << "ERROR: Failed to replicate path '" << containingDir << "' - " << frameworkTitle << " installation may now be corrupt! Error: " << ec.message() << "\n";
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    if (isDir)
+    {
+      // nothing else to do for a directory
+      zip_entry_close(zipPtr);
+      continue;
+    }
+    // this is a file, so extract it
+    // start by opening the destination, truncating if it already exists
+    std::fstream outFile
+    {
+      entryPath, std::ios::binary | std::ios_base::out | std::ios_base::trunc
+    };
+    if (!outFile.is_open() || outFile.fail())
+    {
+      std::cout << "ERROR: Failure opening file '" << entryPath << "' for write - " << frameworkTitle << " installation may now be corrupt!\n";
+      outFile.close();
+      zip_entry_close(zipPtr);
+      zip_close(zipPtr);
+      return;
+    }
+    // now pass this to kubazip with pointer to a callback that will chunk the
+    //  data out to the file
+    if
+    (
+      const int extractResult
+      {
+        zip_entry_extract(zipPtr, ZipExtractToFile, &outFile)
+      };
+      extractResult
+    )
+    {
+      std::cout << "ERROR: Failure extracting file '" << entryPath << "' from zip - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(extractResult) << "\n";
+    }
+    outFile.close();
+    zip_entry_close(zipPtr);
+  }
+  zip_close(zipPtr);
+}
+
 std::string_view GetFrameworkURL(
   const rustLaunchSite::Config::ModFrameworkType framework
 )
@@ -165,9 +284,17 @@ const std::vector<std::string_view> FRAMEWORK_ASSET
   // NONE
   "",
   // CARBON
+#if _MSC_VER || defined(__MINGW32__)
   "Carbon.Windows.Release.zip",
+#else
+  "Carbon.Linux.Release.tar.gz",
+#endif
   // OXIDE
+#if _MSC_VER || defined(__MINGW32__)
   "Oxide.Rust.zip"
+#else
+  "Oxide.Rust-linux.zip"
+#endif
 };
 
 std::string_view GetFrameworkAsset(
@@ -194,6 +321,8 @@ Updater::Updater(
   : cfgSptr_(cfgSptr)
   , downloaderSptr_(downloaderSptr)
   , serverInstallPath_(cfgSptr->GetInstallPath())
+  , appManifestPath_(cfgSptr->GetInstallPath() / "steamapps/appmanifest_258550.acf")
+  , steamCmdPath_(cfgSptr->GetSteamcmdPath())
   , downloadPath_(cfgSptr->GetPathsDownload())
   , frameworkDllPath_(GetFrameworkDllPath(
       serverInstallPath_, cfgSptr->GetUpdateModFrameworkType()))
@@ -203,13 +332,16 @@ Updater::Updater(
   {
     throw std::invalid_argument(std::string("ERROR: Server install path does not exist: ") + serverInstallPath_.string());
   }
+#if _MSC_VER || defined(__MINGW32__)
   if (!std::filesystem::exists(serverInstallPath_ / "RustDedicated.exe"))
+#else
+  if (!std::filesystem::exists(serverInstallPath_ / "RustDedicated"))
+#endif
   {
     throw std::invalid_argument(std::string("ERROR: Rust dedicated server not found in configured install path: ") + serverInstallPath_.string());
   }
 
-  // derive the Steam app manifest path from the configured install location
-  appManifestPath_ = serverInstallPath_ / "steamapps/appmanifest_258550.acf";
+/*
   if (std::filesystem::exists(appManifestPath_))
   {
     // extract SteamCMD utility path from manifest
@@ -225,9 +357,17 @@ Updater::Updater(
     }
   }
   else
+*/
+  if (!std::filesystem::exists(appManifestPath_))
   {
     std::cout << "WARNING: Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled\n";
     appManifestPath_.clear();
+  }
+
+  if (!std::filesystem::exists(steamCmdPath_))
+  {
+    std::cout << "WARNING: Failed to locate SteamCMD at config file specified path " << steamCmdPath_ << "; automatic Steam updates disabled\n";
+    steamCmdPath_.clear();
   }
 
   if (
@@ -319,120 +459,22 @@ void Updater::UpdateFramework(const bool suppressWarning) const
   // this is now downloaded into RAM because kubazip seems to interact weirdly
   //  with std::filesystem on Windows + MSYS MinGW
   const std::vector<char>& zipData{downloaderSptr_->GetUrlToVector(url)};
-  if (zipData.empty())
+  if (zipData.size() < 2)
   {
     std::cout << "ERROR: Cannot update " << frameworkTitle << " because data was not downloaded from URL " << url << "\n";
     return;
   }
 
-  // unzip Carbon/Oxide release into server installation directory
-  // NOTE: both plugin frameworks currently release .zip files that are intended
-  //  to be extracted directly into the server installation root
-  //
-  // first, get the number of files in the zip
-  // TODO: use zip_stream_openwitherror() if vcpkg updates to newer kubazip
-  zip_t* zipPtr(zip_stream_open(zipData.data(), zipData.size(), 0, 'r'));
-  if (!zipPtr)
+  if (zipData.at(0) == 'P' && zipData.at(1) == 'K')
   {
-    std::cout << "ERROR: Failed to open zip data with length=" << zipData.size() << " downloaded from URL " << url << "\n";
-    return;
+    // this is ZIP data
+    ExtractZipData(zipData, url, frameworkTitle, serverInstallPath_);
   }
-  const ssize_t zipEntries(zip_entries_total(zipPtr));
-  if (zipEntries <= 0)
+  else
   {
-    std::cout << "ERROR: Failed to get valid file count from downloaded zip data with length=" << zipData.size() << ": " << zip_strerror(static_cast<int>(zipEntries)) << "\n";
-    zip_close(zipPtr);
-    return;
+    // must be a .tar.gz
+    ExtractArchiveData(zipData, url, frameworkTitle, serverInstallPath_);
   }
-  // loop over all zip entries
-  for (ssize_t i{0}; i < zipEntries; ++i)
-  {
-    if
-    (
-      const auto openResult{zip_entry_openbyindex(zipPtr, i)};
-      openResult
-    )
-    {
-      std::cout << "ERROR: Failed to open zip entry - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(openResult) << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    std::string_view entryName{zip_entry_name(zipPtr)};
-    if (entryName.empty())
-    {
-      std::cout << "ERROR: Failed to determine zip entry name - " << frameworkTitle << " installation may now be corrupt!\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    const int isDirStatus{zip_entry_isdir(zipPtr)};
-    if (isDirStatus < 0)
-    {
-      std::cout << "ERROR: Failed to determine zip entry '" << entryName << "' directory status - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(isDirStatus) << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    // kubazip seems to always return isDir=0, even for obvious directory
-    //  entries whose names end in a slash, so add that to the heuristic
-    const bool isDir{isDirStatus != 0 || entryName.back() == '/' || entryName.back() == '\\'};
-    // calculate the full path relative to server installation
-    std::filesystem::path entryPath{(serverInstallPath_ / entryName).make_preferred()};
-    std::cout << "Extracting zip entry #" << i+1 << "/" << zipEntries << ": " << (isDir ? "Directory" : "File") << " '" << entryName << "' to '" << entryPath << "'\n";
-    // get the parent path if a file, or the full path if a dir
-    std::filesystem::path containingDir{isDir ? entryPath : entryPath.parent_path()};
-    // std::cout << "Creating path (unless it already exists): '" << containingDir << "'\n";
-    // create the directory tree
-    if
-    (
-      std::error_code ec{};
-      // false is returned if dir already exists, so need to check ec also
-      !std::filesystem::create_directories(containingDir, ec) && ec
-    )
-    {
-      std::cout << "ERROR: Failed to replicate path '" << containingDir << "' - " << frameworkTitle << " installation may now be corrupt! Error: " << ec.message() << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    if (isDir)
-    {
-      // nothing else to do for a directory
-      zip_entry_close(zipPtr);
-      continue;
-    }
-    // this is a file, so extract it
-    // start by opening the destination, truncating if it already exists
-    std::fstream outFile
-    {
-      entryPath, std::ios::binary | std::ios_base::out | std::ios_base::trunc
-    };
-    if (!outFile.is_open() || outFile.fail())
-    {
-      std::cout << "ERROR: Failure opening file '" << entryPath << "' for write - " << frameworkTitle << " installation may now be corrupt!\n";
-      outFile.close();
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    // now pass this to kubazip with pointer to a callback that will chunk the
-    //  data out to the file
-    if
-    (
-      const int extractResult
-      {
-        zip_entry_extract(zipPtr, ZipExtractToFile, &outFile)
-      };
-      extractResult
-    )
-    {
-      std::cout << "ERROR: Failure extracting file '" << entryPath << "' from zip - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(extractResult) << "\n";
-    }
-    outFile.close();
-    zip_entry_close(zipPtr);
-  }
-  zip_close(zipPtr);
 }
 
 void Updater::UpdateServer() const
@@ -527,6 +569,7 @@ std::string Updater::GetInstalledFrameworkVersion() const
 {
   std::string retVal;
   if (frameworkDllPath_.empty()) { return retVal; }
+#if _MSC_VER || defined(__MINGW32__)
   // run powershell and grab all output into inStream
   boost::process::ipstream inStream;
   // for some reason boost requires explicitly requesting a PATH search unless
@@ -563,6 +606,70 @@ std::string Updater::GetInstalledFrameworkVersion() const
   while (retVal.back() == '\r' || retVal.back() == '\n') { retVal.pop_back(); }
   // strip off anything starting with `+` or `-` if present
   return retVal.substr(0, retVal.find_first_of("+-"));
+#else
+  // run monodis and grab all output into inStream
+  boost::process::ipstream inStream;
+  // for some reason boost requires explicitly requesting a PATH search unless
+  //  we want to pass the entire command as a single string
+  const auto& psPath{boost::process::search_path("monodis")};
+  if (psPath.empty())
+  {
+    std::cout << "ERROR: Failed to find monodis; you may need to install mono-utils or similar\n";
+    return retVal;
+  }
+  std::error_code errorCode;
+  const int exitCode(boost::process::system(
+    boost::process::exe(psPath),
+    boost::process::args({
+      "--assembly",
+      frameworkDllPath_.string()
+    }),
+    boost::process::std_out > inStream,
+    boost::process::error(errorCode)
+  ));
+  if (errorCode)
+  {
+    std::cout << "ERROR: Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message() << "\n";
+    return retVal;
+  }
+  if (exitCode)
+  {
+    std::cout << "ERROR: " << psPath << " returned nonzero exit code: " << exitCode << "\n";
+    return retVal;
+  }
+  // find the line that begins with "Version:"
+  std::string line;
+  while (std::getline(inStream, line))
+  {
+    if (0 == line.find("Version:"))
+    {
+      // grab everything after "Version:" and after any spaces
+      retVal = line.substr(line.find_first_not_of(' ', 8));
+      break;
+    }
+  }
+  // chop off anything from the third version separator onwards (if present)
+  std::size_t sepCount{0};
+  std::size_t sepPos{};
+  for (std::size_t i{0}; i < retVal.length(); ++i)
+  {
+    if ('.' == retVal.at(i))
+    {
+      ++sepCount;
+      if (3 == sepCount)
+      {
+        sepPos = i;
+        break;
+      }
+    }
+  }
+  if (sepCount > 2 && sepPos > 0)
+  {
+    retVal.resize(sepPos);
+  }
+  // return version number or empty string
+  return retVal;
+#endif
 }
 
 std::string Updater::GetInstalledServerBranch() const
@@ -719,10 +826,7 @@ std::string Updater::GetLatestFrameworkURL() const
   try
   {
     const auto& j(nlohmann::json::parse(frameworkInfo));
-    // "assets" node is a list of release files
-    // there's usually a Linux release that we want to ignore for now
-    // TODO: choose the linux version when appropriate if RLS ever gets
-    //  ported to that OS
+    // "assets" node is a list of release files, so find the one of interest
     for (const auto& asset : j["assets"])
     {
       if (asset["name"].get<std::string>() == frameworkAsset)

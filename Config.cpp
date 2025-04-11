@@ -242,6 +242,11 @@ Config::Config(std::filesystem::path configFile)
       }
     }
 
+    // steamcmd
+    const auto& jRlsSteamcmd{jRls.at("steamcmd")};
+    jRlsSteamcmd.at("path").get_to(steamcmdPath_);
+    steamcmdPath_.make_preferred();
+
     // update
     if (jRls.contains("update"))
     {

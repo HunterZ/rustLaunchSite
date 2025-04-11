@@ -8,6 +8,7 @@
     "curl",
     "ixwebsocket",
     "kubazip",
+    "libarchive",
     "nlohmann-json"
   ]
 }
