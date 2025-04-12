@@ -16,7 +16,6 @@
 #include <archive_entry.h>
 #include <fstream>
 #include <iostream>
-// #include <kubazip/zip/zip.h>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <stdexcept>
@@ -49,39 +48,7 @@ inline bool IsWritable(const std::filesystem::path& path)
   return (0 == access(path.string().c_str(), W_OK));
 #endif
 }
-/*
-using ZipStatus = std::pair<ssize_t, ssize_t>;
-int ZipExtractCallback(const char* filenamePtr, void* argPtr)
-{
-  ZipStatus dummyStatus;
-  auto* statusPtr(static_cast<ZipStatus*>(argPtr));
-  if (!statusPtr) { statusPtr = &dummyStatus; }
-  auto& [count, total] = *statusPtr;
-  ++count;
-  std::cout << "Extracted file " << count << "/" << total << ": " << filenamePtr << "\n";
-  return 0;
-}
-*/
-/*
-// kubazip zip_entry_extract() callback handler
-std::size_t ZipExtractToFile
-(
-  void* contextPtr, [[maybe_unused]] std::uint64_t offset,
-  const void* dataPtr, const std::size_t dataSize
-)
-{
-  auto outFilePtr{static_cast<std::fstream*>(contextPtr)};
-  auto inDataPtr{static_cast<const char*>(dataPtr)};
-  if (!outFilePtr || !inDataPtr)
-  {
-    std::cout << "ERROR: Null data passed to zip extraction callback handler\n";
-    return 0;
-  }
-  // std::cout << "Extracting " << dataSize << " bytes at offset " << offset << "\n";
-  outFilePtr->write(inDataPtr, dataSize);
-  return dataSize;
-}
-*/
+
 enum class SteamCmdReadState
 {
   FIND_INFO_START,
@@ -235,6 +202,11 @@ void ExtractArchiveData(
   std::string_view frameworkTitle,
   [[maybe_unused]] const std::filesystem::path& serverInstallPath)
 {
+  if (archData.size() < 2)
+  {
+    std::cout << "ERROR: Cannot update " << frameworkTitle << " because valid data was not downloaded from URL " << url << "\n";
+    return;
+  }
   auto arch{GetReadArchive()};
   // determine file type
   if (0x1F == archData.at(0) &&
@@ -252,7 +224,7 @@ void ExtractArchiveData(
   else
   {
     // unknown
-    std::cout << "ERROR: Failed determine " << frameworkTitle << " archive format for data of length=" << archData.size() << " downloaded from URL " << url << "\n";
+    std::cout << "ERROR: Failed to determine " << frameworkTitle << " archive format for data of length=" << archData.size() << " downloaded from URL " << url << "\n";
     return;
   }
   // bind arch to data blob
@@ -316,121 +288,7 @@ void ExtractArchiveData(
   archive_read_close(arch.get());
   archive_write_close(outFile.get());
 }
-/*
-// unzip Carbon/Oxide release into server installation directory
-// TODO: port to libarchive so that we aren't carrying around two dependencies
-//  that do the same thing (kubazip doesn't do .tar.gz)
-void ExtractZipData(const std::vector<char>& zipData, std::string_view url, std::string_view frameworkTitle, const std::filesystem::path& serverInstallPath)
-{
-  // NOTE: both plugin frameworks currently release .zip files that are intended
-  //  to be extracted directly into the server installation root
-  //
-  // first, get the number of files in the zip
-  // TODO: use zip_stream_openwitherror() if vcpkg updates to newer kubazip
-  zip_t* zipPtr(zip_stream_open(zipData.data(), zipData.size(), 0, 'r'));
-  if (!zipPtr)
-  {
-    std::cout << "ERROR: Failed to open zip data with length=" << zipData.size() << " downloaded from URL " << url << "\n";
-    return;
-  }
-  const ssize_t zipEntries(zip_entries_total(zipPtr));
-  if (zipEntries <= 0)
-  {
-    std::cout << "ERROR: Failed to get valid file count from downloaded zip data with length=" << zipData.size() << ": " << zip_strerror(static_cast<int>(zipEntries)) << "\n";
-    zip_close(zipPtr);
-    return;
-  }
-  // loop over all zip entries
-  for (ssize_t i{0}; i < zipEntries; ++i)
-  {
-    if
-    (
-      const auto openResult{zip_entry_openbyindex(zipPtr, i)};
-      openResult
-    )
-    {
-      std::cout << "ERROR: Failed to open zip entry - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(openResult) << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    std::string_view entryName{zip_entry_name(zipPtr)};
-    if (entryName.empty())
-    {
-      std::cout << "ERROR: Failed to determine zip entry name - " << frameworkTitle << " installation may now be corrupt!\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    const int isDirStatus{zip_entry_isdir(zipPtr)};
-    if (isDirStatus < 0)
-    {
-      std::cout << "ERROR: Failed to determine zip entry '" << entryName << "' directory status - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(isDirStatus) << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    // kubazip seems to always return isDir=0, even for obvious directory
-    //  entries whose names end in a slash, so add that to the heuristic
-    const bool isDir{isDirStatus != 0 || entryName.back() == '/' || entryName.back() == '\\'};
-    // calculate the full path relative to server installation
-    std::filesystem::path entryPath{(serverInstallPath / entryName).make_preferred()};
-    std::cout << "Extracting zip entry #" << i+1 << "/" << zipEntries << ": " << (isDir ? "Directory" : "File") << " '" << entryName << "' to '" << entryPath << "'\n";
-    // get the parent path if a file, or the full path if a dir
-    std::filesystem::path containingDir{isDir ? entryPath : entryPath.parent_path()};
-    // std::cout << "Creating path (unless it already exists): '" << containingDir << "'\n";
-    // create the directory tree
-    if
-    (
-      std::error_code ec{};
-      // false is returned if dir already exists, so need to check ec also
-      !std::filesystem::create_directories(containingDir, ec) && ec
-    )
-    {
-      std::cout << "ERROR: Failed to replicate path '" << containingDir << "' - " << frameworkTitle << " installation may now be corrupt! Error: " << ec.message() << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    if (isDir)
-    {
-      // nothing else to do for a directory
-      zip_entry_close(zipPtr);
-      continue;
-    }
-    // this is a file, so extract it
-    // start by opening the destination, truncating if it already exists
-    std::fstream outFile
-    {
-      entryPath, std::ios::binary | std::ios_base::out | std::ios_base::trunc
-    };
-    if (!outFile.is_open() || outFile.fail())
-    {
-      std::cout << "ERROR: Failure opening file '" << entryPath << "' for write - " << frameworkTitle << " installation may now be corrupt!\n";
-      outFile.close();
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    // now pass this to kubazip with pointer to a callback that will chunk the
-    //  data out to the file
-    if
-    (
-      const int extractResult
-      {
-        zip_entry_extract(zipPtr, ZipExtractToFile, &outFile)
-      };
-      extractResult
-    )
-    {
-      std::cout << "ERROR: Failure extracting file '" << entryPath << "' from zip - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(extractResult) << "\n";
-    }
-    outFile.close();
-    zip_entry_close(zipPtr);
-  }
-  zip_close(zipPtr);
-}
-*/
+
 std::string_view GetFrameworkURL(
   const rustLaunchSite::Config::ModFrameworkType framework
 )
@@ -615,33 +473,16 @@ void Updater::UpdateFramework(const bool suppressWarning) const
     return;
   }
 
-  // download latest Carbon/Oxide release
+  // get URL of latest Carbon/Oxide release archive
   const auto& url{GetLatestFrameworkURL()};
   if (url.empty())
   {
     std::cout << "WARNING: Cannot update " << frameworkTitle << " because download URL was not found\n";
     return;
   }
-  // this is now downloaded into RAM because kubazip seems to interact weirdly
-  //  with std::filesystem on Windows + MSYS MinGW
+  // download archive to RAM
   const std::vector<char>& archData{downloaderSptr_->GetUrlToVector(url)};
-  if (archData.size() < 2)
-  {
-    std::cout << "ERROR: Cannot update " << frameworkTitle << " because valid data was not downloaded from URL " << url << "\n";
-    return;
-  }
-/*
-  if (zipData.at(0) == 'P' && zipData.at(1) == 'K')
-  {
-    // this is ZIP data
-    ExtractZipData(zipData, url, frameworkTitle, serverInstallPath_);
-  }
-  else
-  {
-    // must be a .tar.gz
-    ExtractArchiveData(zipData, url, frameworkTitle, serverInstallPath_);
-  }
-*/
+  // extract archive
   ExtractArchiveData(archData, url, frameworkTitle, serverInstallPath_);
 }
 
