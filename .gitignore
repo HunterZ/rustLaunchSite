@@ -33,6 +33,8 @@
 
 # custom
 /_CPack_Packages/
+/.cache/
 /.vscode/
 /build/
+/compile_commands.json
 /out/

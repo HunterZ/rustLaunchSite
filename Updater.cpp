@@ -201,13 +201,12 @@ bool IsExecutableFile(const std::filesystem::path& filePath)
 {
   const auto& ext{filePath.extension()};
   return
-  {
        ".a"   == ext
     || ".dll" == ext
     || ".DLL" == ext
     || ".sh"  == ext
     || ".so"  == ext
-  };
+  ;
 }
 
 void FixPermissions(const std::filesystem::path& filePath)

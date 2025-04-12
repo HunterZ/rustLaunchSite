@@ -5,10 +5,8 @@
 #include <curl/curl.h>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <mutex>
-#include <stdexcept>
 
 // NOTE: The Downloader initialization handle stuff in this file is an
 //  implementation detail needed because some of the underlying libraries being

@@ -82,6 +82,12 @@ add_custom_command(TARGET ${PROJECT_NAME}
     ARGS "--strip-all" "$<TARGET_FILE:${PROJECT_NAME}>"
 )
 
+file(CREATE_LINK "${CMAKE_BINARY_DIR}/compile_commands.json"
+  "${CMAKE_SOURCE_DIR}/compile_commands.json"
+  COPY_ON_ERROR
+  SYMBOLIC
+)
+
 # add_executable(downloaderTest
 #   Downloader.cpp
 #   Downloader.h
