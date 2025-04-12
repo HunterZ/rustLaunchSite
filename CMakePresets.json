@@ -64,6 +64,11 @@
   ],
   "buildPresets": [
     {
+      "name": "common",
+      "hidden": true,
+      "verbose": true
+    },
+    {
       "name": "Debug",
       "hidden": true,
       "configuration": "Debug"
@@ -78,6 +83,7 @@
       "configurePreset": "x64-linux",
       "description": "Linux x64 Debug w/static linkage",
       "inherits": [
+        "common",
         "Debug"
       ]
     },
@@ -86,6 +92,7 @@
       "configurePreset": "x64-linux",
       "description": "Linux x64 Release w/static linkage",
       "inherits": [
+        "common",
         "Release"
       ]
     },
@@ -94,6 +101,7 @@
       "configurePreset": "x64-mingw-static",
       "description": "MinGW x64 Debug w/static linkage",
       "inherits": [
+        "common",
         "Debug"
       ]
     },
@@ -102,6 +110,7 @@
       "configurePreset": "x64-mingw-static",
       "description": "MinGW x64 Release w/static linkage",
       "inherits": [
+        "common",
         "Release"
       ]
     },
@@ -110,6 +119,7 @@
       "configurePreset": "x64-windows-static",
       "description": "MSVC x64 Debug w/static linkage",
       "inherits": [
+        "common",
         "Debug"
       ]
     },
@@ -118,6 +128,7 @@
       "configurePreset": "x64-windows-static",
       "description": "MSVC x64 Release w/static linkage",
       "inherits": [
+        "common",
         "Release"
       ]
     }

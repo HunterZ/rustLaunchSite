@@ -197,6 +197,38 @@ bool CheckArchiveResult(
   return !isError;
 }
 
+bool IsExecutableFile(const std::filesystem::path& filePath)
+{
+  const auto& ext{filePath.extension()};
+  return
+  {
+       ".a"   == ext
+    || ".dll" == ext
+    || ".DLL" == ext
+    || ".sh"  == ext
+    || ".so"  == ext
+  };
+}
+
+void FixPermissions(const std::filesystem::path& filePath)
+{
+  if (!IsExecutableFile(filePath)) return;
+  std::error_code ec{};
+  std::filesystem::permissions(filePath,
+    std::filesystem::perms::owner_exec
+    | std::filesystem::perms::group_exec
+    | std::filesystem::perms::others_exec,
+    std::filesystem::perm_options::add,
+    ec
+  );
+  if (ec)
+  {
+    std::cout << "ERROR: Issue while setting execute permissions on file " << filePath << ": " << ec.message() << "\n";
+    return;
+  }
+  std::cout << "Set execute permissions on file " << filePath << "\n";
+}
+
 // extract Carbon/Oxide release archive into server installation directory
 void ExtractArchiveData(
   const std::vector<char>& archData,
@@ -220,7 +252,7 @@ void ExtractArchiveData(
   }
   else
   {
-    // unknwon
+    // unknown
     std::cout << "ERROR: Failed determine " << frameworkTitle << " archive format for data of length=" << archData.size() << " downloaded from URL " << url << "\n";
     return;
   }
@@ -259,23 +291,28 @@ void ExtractArchiveData(
     result = archive_write_header(outFile.get(), entry);
     if (result < ARCHIVE_OK)
     {
-      std::cout << "WARNING: Issue while creating output file: " << archive_error_string(outFile.get()) << "\n";
+      std::cout << "WARNING: Issue while creating output file " << outFilePath << ": " << archive_error_string(outFile.get()) << "\n";
     }
-    else if (archive_entry_size(entry) > 0)
-    {
-      // write output file data
-      if (!CheckArchiveResult(CopyArchiveData(arch, outFile),
-          "Issue while writing output file", outFile))
-      {
-        break;
-      }
-    }
-    // finalize output file
-    if (!CheckArchiveResult(archive_write_finish_entry(outFile.get()),
-        "Issue while finalizing output file", outFile))
+    else if
+    (
+      archive_entry_size(entry) > 0 && !CheckArchiveResult(
+        // write output file data
+        CopyArchiveData(arch, outFile),
+        std::string{"Issue while writing output file "} +
+          outFilePath.generic_string(), outFile)
+    )
     {
       break;
     }
+    // finalize output file
+    if (!CheckArchiveResult(archive_write_finish_entry(outFile.get()),
+        std::string{"Issue while finalizing output file "} +
+          outFilePath.generic_string(), outFile))
+    {
+      break;
+    }
+    std::cout << "Extracted file " << outFilePath << "\n";
+    FixPermissions(outFilePath);
   }
   archive_read_close(arch.get());
   archive_write_close(outFile.get());
