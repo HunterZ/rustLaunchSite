@@ -22,21 +22,30 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest]
-        triplet: [x64-mingw-static, x64-windows-static]
+        triplet: [x64-linux, x64-mingw-static, x64-windows-static]
         buildtype: [debug, release]
+        include:
+          - triplet: x64-linux
+            os: ubuntu-latest
+          - triplet: x64-mingw-static
+            os: windows-latest
+          - triplet: x64-windows-static
+            os: windows-latest
 
     name: "${{ github.workflow }}.${{ matrix.os }}.${{ matrix.triplet }}.${{ matrix.buildtype }}"
     runs-on: ${{ matrix.os }}
 
     env:
       FIX_PATH: "\
+        ${{ matrix.triplet == 'x64-linux' && 'sed s|\\\\|/|g' || '' }}\
         ${{ matrix.triplet == 'x64-mingw-static' && 'sed s|\\\\|/|g' || '' }}\
         ${{ matrix.triplet == 'x64-windows-static' && 'sed s|/|\\\\|g' || '' }}"
       MSYSTEM: "\
+        ${{ matrix.triplet == 'x64-linux' && 'LINUX' || '' }}\
         ${{ matrix.triplet == 'x64-mingw-static' && 'MINGW64' || '' }}\
         ${{ matrix.triplet == 'x64-windows-static' && 'MSVC' || '' }}"
       SCRIPT_EXT: "\
+        ${{ matrix.triplet == 'x64-linux' && '.sh' || '' }}\
         ${{ matrix.triplet == 'x64-mingw-static' && '.sh' || '' }}\
         ${{ matrix.triplet == 'x64-windows-static' && '.bat' || '' }}"
       VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
@@ -49,6 +58,13 @@ jobs:
           ${{ matrix.triplet == 'x64-windows-static' && 'cmd' || '' }}"
 
     steps:
+      - name: Setup Linux environment
+        if: ${{ env.MSYSTEM == 'LINUX' }}
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake ninja
+          version: 1.0
+
       - name: Setup MSVC environment (1/2)
         if: ${{ env.MSYSTEM == 'MSVC' }}
         uses: ilammy/msvc-dev-cmd@v1
@@ -64,12 +80,12 @@ jobs:
           choco install cmake ninja
 
       - name: Setup MSYS2 environment (1/2)
-        if: ${{ env.MSYSTEM != 'MSVC' }}
+        if: ${{ env.MSYSTEM == 'MINGW64' }}
         shell: bash
         run: |
           git config --global core.autocrlf input
       - name: Setup MSYS2 environment (2/2)
-        if: ${{ env.MSYSTEM != 'MSVC' }}
+        if: ${{ env.MSYSTEM == 'MINGW64' }}
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ env.MSYSTEM }}

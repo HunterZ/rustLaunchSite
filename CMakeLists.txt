@@ -77,7 +77,7 @@ target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 
 add_custom_command(TARGET ${PROJECT_NAME}
   POST_BUILD
-  DEPENDS ${PROJECT_NAME}
+  # DEPENDS ${PROJECT_NAME}
   COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
     ARGS "--strip-all" "$<TARGET_FILE:${PROJECT_NAME}>"
 )

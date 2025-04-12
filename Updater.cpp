@@ -8,11 +8,12 @@
   #include <SDKDDKVer.h>
 #endif
 
-#include <archive_entry.h>
 #include <archive.h>
 #include <boost/process.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+// this must be included after boost, because it #include's Windows.h
+#include <archive_entry.h>
 #include <fstream>
 #include <iostream>
 // #include <kubazip/zip/zip.h>
