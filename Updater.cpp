@@ -8,12 +8,14 @@
   #include <SDKDDKVer.h>
 #endif
 
+#include <archive_entry.h>
+#include <archive.h>
 #include <boost/process.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
 #include <iostream>
-#include <kubazip/zip/zip.h>
+// #include <kubazip/zip/zip.h>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <stdexcept>
@@ -59,7 +61,7 @@ int ZipExtractCallback(const char* filenamePtr, void* argPtr)
   return 0;
 }
 */
-
+/*
 // kubazip zip_entry_extract() callback handler
 std::size_t ZipExtractToFile
 (
@@ -78,7 +80,7 @@ std::size_t ZipExtractToFile
   outFilePtr->write(inDataPtr, dataSize);
   return dataSize;
 }
-
+*/
 enum class SteamCmdReadState
 {
   FIND_INFO_START,
@@ -146,11 +148,138 @@ const std::vector<std::string_view> FRAMEWORK_URL
   "https://api.github.com/repos/OxideMod/Oxide.Rust/releases/latest"
 };
 
-void ExtractArchiveData(const std::vector<char>& zipData, std::string_view url, std::string_view frameworkTitle, const std::filesystem::path& serverInstallPath)
+std::shared_ptr<struct archive> GetReadArchive()
 {
-  std::cout << "***** TODO: Extract archive of length=" << zipData.size() << " downloaded from " << url << " containing framework=" << frameworkTitle << " to destination " << serverInstallPath << std::endl;
+  return {archive_read_new(), [](struct archive* h){archive_read_free(h);}};
 }
 
+std::shared_ptr<struct archive> GetWriteDiskArchive()
+{
+  return {
+    archive_write_disk_new(), [](struct archive* h){archive_write_free(h);}};
+}
+
+int CopyArchiveData(
+  std::shared_ptr<struct archive> ar, std::shared_ptr<struct archive> aw)
+{
+  while (true)
+  {
+    const void* buff{};
+    std::size_t size{};
+    std::int64_t offset{};
+    const auto readResult{
+      archive_read_data_block(ar.get(), &buff, &size, &offset)};
+    if (ARCHIVE_EOF == readResult) return ARCHIVE_OK;
+    if (readResult < ARCHIVE_OK) return readResult;
+    const auto writeResult{
+      archive_write_data_block(aw.get(), buff, size, offset)};
+    if (writeResult < ARCHIVE_OK)
+    {
+      std::cout << "Failed to write extracted file data: " << archive_error_string(aw.get()) << "\n";
+      return static_cast<int>(writeResult);
+    }
+  }
+}
+
+bool CheckArchiveResult(
+  const int result,
+  std::string_view prefix,
+  std::shared_ptr<struct archive> arch)
+{
+  if (result == ARCHIVE_EOF) return false;
+  if (result >= ARCHIVE_OK) return true;
+  const bool isError{result < ARCHIVE_WARN};
+  std::cout << (isError ? "ERROR" : "WARNING");
+  if (!prefix.empty()) std::cout << ": " << prefix;
+  if (arch) std::cout << ": " << archive_error_string(arch.get());
+  std::cout << "\n";
+  return !isError;
+}
+
+// extract Carbon/Oxide release archive into server installation directory
+void ExtractArchiveData(
+  const std::vector<char>& archData,
+  std::string_view url,
+  std::string_view frameworkTitle,
+  [[maybe_unused]] const std::filesystem::path& serverInstallPath)
+{
+  auto arch{GetReadArchive()};
+  // determine file type
+  if (0x1F == archData.at(0) &&
+      0x8B == static_cast<unsigned char>(archData.at(1)))
+  {
+    // .tar.gz
+    archive_read_support_filter_gzip(arch.get());
+    archive_read_support_format_tar(arch.get());
+  }
+  else if ('P' == archData.at(0) && 'K' == archData.at(1))
+  {
+    // .zip
+    archive_read_support_format_zip(arch.get());
+  }
+  else
+  {
+    // unknwon
+    std::cout << "ERROR: Failed determine " << frameworkTitle << " archive format for data of length=" << archData.size() << " downloaded from URL " << url << "\n";
+    return;
+  }
+  // bind arch to data blob
+  auto result{
+    archive_read_open_memory(arch.get(), archData.data(), archData.size())};
+  if (ARCHIVE_OK != result)
+  {
+    std::cout << "ERROR: Failed to open " << frameworkTitle << " archive data of length=" << archData.size() << " downloaded from URL " << url << "\n";
+    return;
+  }
+  // allocate a handle for writing extracted data to disk
+  auto outFile{GetWriteDiskArchive()};
+  archive_write_disk_set_options(
+    outFile.get(),
+    ARCHIVE_EXTRACT_ACL    |
+    ARCHIVE_EXTRACT_FFLAGS |
+    ARCHIVE_EXTRACT_PERM   |
+    ARCHIVE_EXTRACT_TIME
+  );
+  archive_write_disk_set_standard_lookup(outFile.get());
+  // loop through archive contents and extract to disk
+  while (true)
+  {
+    // extract entry metadata
+    struct archive_entry* entry{};
+    if (!CheckArchiveResult(archive_read_next_header(arch.get(), &entry),
+        "Issue while reading archive entry", arch))
+    {
+      break;
+    }
+    // make the output file relative to server install path
+    const auto outFilePath{serverInstallPath / archive_entry_pathname_w(entry)};
+    archive_entry_copy_pathname_w(entry, outFilePath.generic_wstring().data());
+    // create output file for entry
+    result = archive_write_header(outFile.get(), entry);
+    if (result < ARCHIVE_OK)
+    {
+      std::cout << "WARNING: Issue while creating output file: " << archive_error_string(outFile.get()) << "\n";
+    }
+    else if (archive_entry_size(entry) > 0)
+    {
+      // write output file data
+      if (!CheckArchiveResult(CopyArchiveData(arch, outFile),
+          "Issue while writing output file", outFile))
+      {
+        break;
+      }
+    }
+    // finalize output file
+    if (!CheckArchiveResult(archive_write_finish_entry(outFile.get()),
+        "Issue while finalizing output file", outFile))
+    {
+      break;
+    }
+  }
+  archive_read_close(arch.get());
+  archive_write_close(outFile.get());
+}
+/*
 // unzip Carbon/Oxide release into server installation directory
 // TODO: port to libarchive so that we aren't carrying around two dependencies
 //  that do the same thing (kubazip doesn't do .tar.gz)
@@ -264,7 +393,7 @@ void ExtractZipData(const std::vector<char>& zipData, std::string_view url, std:
   }
   zip_close(zipPtr);
 }
-
+*/
 std::string_view GetFrameworkURL(
   const rustLaunchSite::Config::ModFrameworkType framework
 )
@@ -458,13 +587,13 @@ void Updater::UpdateFramework(const bool suppressWarning) const
   }
   // this is now downloaded into RAM because kubazip seems to interact weirdly
   //  with std::filesystem on Windows + MSYS MinGW
-  const std::vector<char>& zipData{downloaderSptr_->GetUrlToVector(url)};
-  if (zipData.size() < 2)
+  const std::vector<char>& archData{downloaderSptr_->GetUrlToVector(url)};
+  if (archData.size() < 2)
   {
-    std::cout << "ERROR: Cannot update " << frameworkTitle << " because data was not downloaded from URL " << url << "\n";
+    std::cout << "ERROR: Cannot update " << frameworkTitle << " because valid data was not downloaded from URL " << url << "\n";
     return;
   }
-
+/*
   if (zipData.at(0) == 'P' && zipData.at(1) == 'K')
   {
     // this is ZIP data
@@ -475,6 +604,8 @@ void Updater::UpdateFramework(const bool suppressWarning) const
     // must be a .tar.gz
     ExtractArchiveData(zipData, url, frameworkTitle, serverInstallPath_);
   }
+*/
+  ExtractArchiveData(archData, url, frameworkTitle, serverInstallPath_);
 }
 
 void Updater::UpdateServer() const

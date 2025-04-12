@@ -7,7 +7,6 @@
     "boost-property-tree",
     "curl",
     "ixwebsocket",
-    "kubazip",
     "libarchive",
     "nlohmann-json"
   ]

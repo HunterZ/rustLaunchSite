@@ -2,9 +2,25 @@
   "version": 6,
   "configurePresets": [
     {
-      "name": "ninja-multi-vcpkg",
+      "name": "ninja",
       "hidden": true,
-      "generator": "Ninja",
+      "generator": "Ninja"
+    },
+    {
+      "name": "ninja-multi",
+      "hidden": true,
+      "generator": "Ninja Multi-Config"
+    },
+    {
+      "name": "static",
+      "hidden": true,
+      "cacheVariables": {
+        "RLS_STATIC": "ON"
+      }
+    },
+    {
+      "name": "vcpkg",
+      "hidden": true,
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -19,34 +35,30 @@
       }
     },
     {
-      "name": "static",
-      "hidden": true,
-      "cacheVariables": {
-        "RLS_STATIC": "ON"
-      }
-    },
-    {
       "name": "x64-linux",
       "description": "Linux x64 w/static linkage",
       "inherits": [
-        "ninja-multi-vcpkg",
-        "static"
+        "ninja",
+        "static",
+        "vcpkg"
       ]
     },
     {
       "name": "x64-mingw-static",
       "description": "MinGW x64 w/static linkage",
       "inherits": [
-        "ninja-multi-vcpkg",
-        "static"
+        "ninja-multi",
+        "static",
+        "vcpkg"
       ]
     },
     {
       "name": "x64-windows-static",
       "description": "MSVC x64 w/static linkage",
       "inherits": [
-        "ninja-multi-vcpkg",
-        "static"
+        "ninja-multi",
+        "static",
+        "vcpkg"
       ]
     }
   ],
