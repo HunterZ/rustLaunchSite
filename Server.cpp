@@ -50,7 +50,8 @@ struct WindowsCreationFlags : boost::process::extend::handler
   {
   }
 
-  // this function will be invoked at child process constructor before spawning process
+  // this function will be invoked at child process constructor before spawning
+  //  process
   template <typename Char, typename Sequence>
   void on_setup(boost::process::extend::windows_executor<Char, Sequence> & ex)
   {
@@ -61,7 +62,8 @@ struct WindowsCreationFlags : boost::process::extend::handler
 };
 #endif
 
-std::string GetRustDedicatedPath(std::shared_ptr<const rustLaunchSite::Config> cfgSptr)
+std::filesystem::path GetRustDedicatedPath(
+  std::shared_ptr<const rustLaunchSite::Config> cfgSptr)
 {
 #if (_MSC_VER || defined(__MINGW32__))
   return cfgSptr->GetInstallPath() / "RustDedicated.exe";
