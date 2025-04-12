@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <curl/curl.h>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>

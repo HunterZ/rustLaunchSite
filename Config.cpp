@@ -1,10 +1,10 @@
 #include "Config.h"
 
+#include <boost/process.hpp>
 #include <iostream>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
-#include <sstream>
 #include <string_view>
 
 namespace
@@ -243,9 +243,34 @@ Config::Config(std::filesystem::path configFile)
     }
 
     // steamcmd
-    const auto& jRlsSteamcmd{jRls.at("steamcmd")};
-    jRlsSteamcmd.at("path").get_to(steamcmdPath_);
+    //  prefer configured value if present
+    if (jRls.contains("steamcmd"))
+    {
+      const auto& jRlsSteamcmd{jRls.at("steamcmd")};
+      if (jRlsSteamcmd.contains("path"))
+      {
+        jRlsSteamcmd.at("path").get_to(steamcmdPath_);
+        if (!std::filesystem::exists(steamcmdPath_))
+        {
+          std::cout << "WARNING: steamcmd not found at configured path " << steamcmdPath_ << "; will attempt to get from environment\n";
+        }
+      }
+    }
+    //  fall back to environment search (e.g. PATH)
+    if (!std::filesystem::exists(steamcmdPath_))
+    {
+      steamcmdPath_ =
+        boost::process::search_path("steamcmd").generic_wstring();
+    }
     steamcmdPath_.make_preferred();
+    if (std::filesystem::exists(steamcmdPath_))
+    {
+      std::cout << "INFO: using steamcmd at path: " << steamcmdPath_ << "\n";
+    }
+    else
+    {
+      std::cout << "WARNING: steamcmd not found; dependent features may not work\n";
+    }
 
     // update
     if (jRls.contains("update"))
