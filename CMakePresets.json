@@ -74,7 +74,7 @@
       "configuration": "Release"
     },
     {
-      "name": "x64-linux-static-debug",
+      "name": "x64-linux-debug",
       "configurePreset": "x64-linux",
       "description": "Linux x64 Debug w/static linkage",
       "inherits": [
@@ -82,7 +82,7 @@
       ]
     },
     {
-      "name": "x64-linux-static-release",
+      "name": "x64-linux-release",
       "configurePreset": "x64-linux",
       "description": "Linux x64 Release w/static linkage",
       "inherits": [
