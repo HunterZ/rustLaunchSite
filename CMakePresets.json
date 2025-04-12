@@ -38,7 +38,7 @@
       "name": "x64-linux",
       "description": "Linux x64 w/static linkage",
       "inherits": [
-        "ninja",
+        "ninja-multi",
         "static",
         "vcpkg"
       ]
