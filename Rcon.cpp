@@ -7,7 +7,6 @@
 #include <nlohmann/json.hpp>
 #include <random>
 #include <sstream>
-#include <thread>
 
 // internal type/data definitions
 namespace

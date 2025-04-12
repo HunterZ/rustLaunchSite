@@ -11,12 +11,16 @@
 // #include <boost/winapi/show_window.hpp>
 #include <boost/process.hpp>
 #include <boost/process/extend.hpp>
-#include <boost/process/windows.hpp>
+#if _MSC_VER || defined(__MINGW32__)
+  #include <boost/process/windows.hpp>
+#else
+  #include <cerrno>
+  #include <csignal>
+#endif
 #include <chrono>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
-#include <string>
 #include <system_error>
 #include <thread>
 
@@ -32,6 +36,7 @@ inline std::string QuoteString(const std::string& s)
   );
 }
 
+#if _MSC_VER || defined(__MINGW32__)
 // boost::process extension to launch a process in a new console window
 // idea from https://stackoverflow.com/a/69774875/3171290 and
 //  https://stackoverflow.com/a/68751737/3171290
@@ -44,7 +49,8 @@ struct WindowsCreationFlags : boost::process::extend::handler
   {
   }
 
-  // this function will be invoked at child process constructor before spawning process
+  // this function will be invoked at child process constructor before spawning
+  //  process
   template <typename Char, typename Sequence>
   void on_setup(boost::process::extend::windows_executor<Char, Sequence> & ex)
   {
@@ -53,6 +59,20 @@ struct WindowsCreationFlags : boost::process::extend::handler
     // std::cout << "Modified Windows handle inheritance: " << ex.inherit_handles << std::endl;
   }
 };
+#endif
+
+std::filesystem::path GetRustDedicatedPath(
+  std::shared_ptr<const rustLaunchSite::Config> cfgSptr)
+{
+#if (_MSC_VER || defined(__MINGW32__))
+  return cfgSptr->GetInstallPath() / "RustDedicated.exe";
+#else
+  return cfgSptr->GetInstallPath() / (
+    cfgSptr->GetUpdateModFrameworkType() ==
+    rustLaunchSite::Config::ModFrameworkType::CARBON ?
+      "carbon.sh" : "runds.sh");
+#endif
+}
 }
 
 namespace rustLaunchSite
@@ -60,6 +80,9 @@ namespace rustLaunchSite
 struct ProcessImpl
 {
   std::unique_ptr<boost::process::child> processUptr_;
+#if (!_MSC_VER && !defined(__MINGW32__))
+  boost::process::group processGroup_{};
+#endif
 };
 
 Server::Server(std::shared_ptr<const Config> cfgSptr)
@@ -67,7 +90,7 @@ Server::Server(std::shared_ptr<const Config> cfgSptr)
       cfgSptr->GetRconIP(), cfgSptr->GetRconPort(), cfgSptr->GetRconPassword(),
       cfgSptr->GetRconLog()
     ))
-  , rustDedicatedPath_(cfgSptr->GetInstallPath() / "RustDedicated.exe")
+  , rustDedicatedPath_(GetRustDedicatedPath(cfgSptr))
   , stopDelaySeconds_(cfgSptr->GetProcessShutdownDelaySeconds())
   , workingDirectory_(cfgSptr->GetInstallPath())
 {
@@ -304,70 +327,7 @@ bool Server::Start()
     // std::cout << "WARNING: Resetting defunct server process handle" << std::endl;
     processImplUptr_->processUptr_.reset();
   }
-  std::error_code errorCode;
-/* NOTE: this mode is disabled because at best it detaches from RLS to the point
-  that I can't seem to kill it
-  if (false)
-  {
-    const auto conPath(boost::process::search_path("conhost.exe"));
-    if (conPath.empty())
-    {
-      std::cout << "ERROR: Failed to find conhost" << std::endl;
-      return false;
-    }
-    std::vector<std::string> args
-    {
-      // "/S", "/C",
-      // "start",
-      // "/D", workingDirectory_,
-      // "/MAX",
-      // "/WAIT",
-      rustDedicatedPath_
-    };
-    args.insert(
-      args.end(),
-      rustDedicatedArguments_.begin(), rustDedicatedArguments_.end()
-    );
-    processImplUptr_->processUptr_ = std::make_unique<boost::process::child>(
-      // boost::process::shell(errorCode),
-      boost::process::exe(conPath),
-      boost::process::args(args),
-      boost::process::start_dir(workingDirectory_),
-      // I/O redirect options and effects w/create group+console
-      // - do nothing: broken scrolling, can't terminate
-      // - close any/all: broken scrolling, can't terminate
-      // - redirect any/all to null: looks OK, can't terminate?
-      // ***could be create new console or process group that broke terminate
-      // boost::process::std_in.close(),
-      // boost::process::std_out.close(),
-      // boost::process::std_err.close(),
-      // I/O redirect options and effects w/create console only
-      // - redirect: looks OK, can't terminate
-      // I/O redirect options and effects w/detached only
-      // - redirect: looks OK, can't terminate
-      // I/O redirect options and effects w/create no window only
-      // - redirect: no window, can't terminate
-      boost::process::std_in  < boost::process::null,
-      boost::process::std_out > boost::process::null,
-      boost::process::std_err > boost::process::null,
-      boost::process::error(errorCode),
-      boost::process::windows::maximized //,
-      // WindowsCreationFlags(
-        // disconnect child process from Ctrl+C signals issued to parent
-        // boost::winapi::CREATE_NEW_PROCESS_GROUP_ |
-        // boost::winapi::CREATE_NO_WINDOW_
-      // )
-    );
-  }
-  else
-  {
-*/
-  // std::cout << "***** ARGS BEGIN:" << std::endl;
-  // for (const auto& arg : rustDedicatedArguments_)
-  // {
-  //   std::cout << "*****\t" << arg << std::endl;
-  // }
-  // std::cout << "***** ARGS END:" << std::endl;
+  std::error_code errorCode{};
   processImplUptr_->processUptr_ = std::make_unique<boost::process::child>(
     boost::process::exe(rustDedicatedPath_.string()),
     boost::process::args(rustDedicatedArguments_),
@@ -379,15 +339,18 @@ bool Server::Start()
     boost::process::std_in  < boost::process::null,
     boost::process::std_out > boost::process::null,
     boost::process::std_err > boost::process::null,
-    boost::process::error(errorCode),
+    boost::process::error(errorCode)
+  #if _MSC_VER || defined(__MINGW32__)
+    ,
     WindowsCreationFlags(
       // disconnect child process from Ctrl+C signals issued to parent
       boost::winapi::CREATE_NEW_PROCESS_GROUP_
     )
+  #else
+    // disconnect child process from POSIX signals issued to parent
+    , processImplUptr_->processGroup_
+  #endif
   );
-/*
-  }
-*/
   if (!processImplUptr_->processUptr_)
   {
     std::cout << "ERROR: Failed to create server process handle" << std::endl;
@@ -399,7 +362,6 @@ bool Server::Start()
     processImplUptr_->processUptr_.reset();
     return false;
   }
-  // auto& process(*processImplUptr_->process_);
   for (std::size_t i(0); i < 10 && !IsRunning(); ++i)
   {
     std::cout << "WARNING: Server not running - waiting..." << std::endl;
@@ -412,10 +374,6 @@ bool Server::Start()
     return false;
   }
   std::cout << "Server launched successfully" << std::endl;
-  // std::cout
-  //   << "id=" << processImplUptr_->processUptr_->id()
-  //   << ", handle=" << processImplUptr_->processUptr_->native_handle()
-  //   << std::endl;
   return true;
 }
 
@@ -452,9 +410,27 @@ void Server::Stop(const std::string& reason)
     std::cout << "WARNING: RCON is not available; cannot issue shutdown commands" << std::endl;
   }
   std::error_code errorCode;
+#if !_MSC_VER && !defined(__MINGW32__)
+  // POSIX-only: send a SIGINT (Ctrl+C) because it will trigger a cleaner
+  //  shutdown than the SIGKILL sent by terminate()
   if (IsRunning())
   {
-    std::cout << "WARNING: Server still running; performing process kill" << std::endl;
+    std::cout << "WARNING: Server still running; interrupting process" << std::endl;
+    if (-1 == kill(processImplUptr_->processUptr_->id(), SIGINT))
+    {
+      std::cout << "WARNING: POSIX kill(SIGINT) returned error code: " << strerror(errno) << std::endl;
+    }
+    // interrupt shutdown isn't instantaneous, so allow for another wait cycle
+    for (std::size_t i(0); i < 10 && IsRunning(); ++i)
+    {
+      std::cout << "Waiting for server to terminate..." << std::endl;
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+  }
+#endif
+  if (IsRunning())
+  {
+    std::cout << "WARNING: Server still running; killing process" << std::endl;
     process.terminate(errorCode);
   }
   if (errorCode)

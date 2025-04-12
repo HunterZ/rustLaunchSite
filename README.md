@@ -23,6 +23,8 @@ RLS requires a single command line parameter: A path to an RLS configuration fil
 
 RLS currently only logs to the standard console output. This can be redirected to a file.
 
+To check Carbon/Oxide DLL versions, RLS invokes Powershell on Windows, or monodis on Linux. The latter can be found in a mono-utils or similar package in your distro's package manager. The appropriate utility must be resolvable from the PATH environment variable of the account under which RLS is executed.
+
 ## Roadmap
 I have a lot of ideas for improving RLS. See the Issues section of the project, as I plan to capture my thoughts there.
 

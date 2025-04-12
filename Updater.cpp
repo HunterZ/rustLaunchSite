@@ -8,12 +8,14 @@
   #include <SDKDDKVer.h>
 #endif
 
+#include <archive.h>
 #include <boost/process.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+// this must be included after boost, because it #include's Windows.h
+#include <archive_entry.h>
 #include <fstream>
 #include <iostream>
-#include <kubazip/zip/zip.h>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <stdexcept>
@@ -45,38 +47,6 @@ inline bool IsWritable(const std::filesystem::path& path)
 #else
   return (0 == access(path.string().c_str(), W_OK));
 #endif
-}
-/*
-using ZipStatus = std::pair<ssize_t, ssize_t>;
-int ZipExtractCallback(const char* filenamePtr, void* argPtr)
-{
-  ZipStatus dummyStatus;
-  auto* statusPtr(static_cast<ZipStatus*>(argPtr));
-  if (!statusPtr) { statusPtr = &dummyStatus; }
-  auto& [count, total] = *statusPtr;
-  ++count;
-  std::cout << "Extracted file " << count << "/" << total << ": " << filenamePtr << "\n";
-  return 0;
-}
-*/
-
-// kubazip zip_entry_extract() callback handler
-std::size_t ZipExtractToFile
-(
-  void* contextPtr, [[maybe_unused]] std::uint64_t offset,
-  const void* dataPtr, const std::size_t dataSize
-)
-{
-  auto outFilePtr{static_cast<std::fstream*>(contextPtr)};
-  auto inDataPtr{static_cast<const char*>(dataPtr)};
-  if (!outFilePtr || !inDataPtr)
-  {
-    std::cout << "ERROR: Null data passed to zip extraction callback handler\n";
-    return 0;
-  }
-  // std::cout << "Extracting " << dataSize << " bytes at offset " << offset << "\n";
-  outFilePtr->write(inDataPtr, dataSize);
-  return dataSize;
 }
 
 enum class SteamCmdReadState
@@ -146,6 +116,179 @@ const std::vector<std::string_view> FRAMEWORK_URL
   "https://api.github.com/repos/OxideMod/Oxide.Rust/releases/latest"
 };
 
+std::shared_ptr<struct archive> GetReadArchive()
+{
+  return {archive_read_new(), [](struct archive* h){archive_read_free(h);}};
+}
+
+std::shared_ptr<struct archive> GetWriteDiskArchive()
+{
+  return {
+    archive_write_disk_new(), [](struct archive* h){archive_write_free(h);}};
+}
+
+int CopyArchiveData(
+  std::shared_ptr<struct archive> ar, std::shared_ptr<struct archive> aw)
+{
+  while (true)
+  {
+    const void* buff{};
+    std::size_t size{};
+    std::int64_t offset{};
+    const auto readResult{
+      archive_read_data_block(ar.get(), &buff, &size, &offset)};
+    if (ARCHIVE_EOF == readResult) return ARCHIVE_OK;
+    if (readResult < ARCHIVE_OK) return readResult;
+    const auto writeResult{
+      archive_write_data_block(aw.get(), buff, size, offset)};
+    if (writeResult < ARCHIVE_OK)
+    {
+      std::cout << "Failed to write extracted file data: " << archive_error_string(aw.get()) << "\n";
+      return static_cast<int>(writeResult);
+    }
+  }
+}
+
+bool CheckArchiveResult(
+  const int result,
+  std::string_view prefix,
+  std::shared_ptr<struct archive> arch)
+{
+  if (result == ARCHIVE_EOF) return false;
+  if (result >= ARCHIVE_OK) return true;
+  const bool isError{result < ARCHIVE_WARN};
+  std::cout << (isError ? "ERROR" : "WARNING");
+  if (!prefix.empty()) std::cout << ": " << prefix;
+  if (arch) std::cout << ": " << archive_error_string(arch.get());
+  std::cout << "\n";
+  return !isError;
+}
+
+bool IsExecutableFile(const std::filesystem::path& filePath)
+{
+  const auto& ext{filePath.extension()};
+  return
+       ".a"   == ext
+    || ".dll" == ext
+    || ".DLL" == ext
+    || ".sh"  == ext
+    || ".so"  == ext
+  ;
+}
+
+void FixPermissions(const std::filesystem::path& filePath)
+{
+  if (!IsExecutableFile(filePath)) return;
+  std::error_code ec{};
+  std::filesystem::permissions(filePath,
+    std::filesystem::perms::owner_exec
+    | std::filesystem::perms::group_exec
+    | std::filesystem::perms::others_exec,
+    std::filesystem::perm_options::add,
+    ec
+  );
+  if (ec)
+  {
+    std::cout << "ERROR: Issue while setting execute permissions on file " << filePath << ": " << ec.message() << "\n";
+    return;
+  }
+  std::cout << "Set execute permissions on file " << filePath << "\n";
+}
+
+// extract Carbon/Oxide release archive into server installation directory
+void ExtractArchiveData(
+  const std::vector<char>& archData,
+  std::string_view url,
+  std::string_view frameworkTitle,
+  [[maybe_unused]] const std::filesystem::path& serverInstallPath)
+{
+  if (archData.size() < 2)
+  {
+    std::cout << "ERROR: Cannot update " << frameworkTitle << " because valid data was not downloaded from URL " << url << "\n";
+    return;
+  }
+  auto arch{GetReadArchive()};
+  // determine file type
+  if (0x1F == archData.at(0) &&
+      0x8B == static_cast<unsigned char>(archData.at(1)))
+  {
+    // .tar.gz
+    archive_read_support_filter_gzip(arch.get());
+    archive_read_support_format_tar(arch.get());
+  }
+  else if ('P' == archData.at(0) && 'K' == archData.at(1))
+  {
+    // .zip
+    archive_read_support_format_zip(arch.get());
+  }
+  else
+  {
+    // unknown
+    std::cout << "ERROR: Failed to determine " << frameworkTitle << " archive format for data of length=" << archData.size() << " downloaded from URL " << url << "\n";
+    return;
+  }
+  // bind arch to data blob
+  auto result{
+    archive_read_open_memory(arch.get(), archData.data(), archData.size())};
+  if (ARCHIVE_OK != result)
+  {
+    std::cout << "ERROR: Failed to open " << frameworkTitle << " archive data of length=" << archData.size() << " downloaded from URL " << url << "\n";
+    return;
+  }
+  // allocate a handle for writing extracted data to disk
+  auto outFile{GetWriteDiskArchive()};
+  archive_write_disk_set_options(
+    outFile.get(),
+    ARCHIVE_EXTRACT_ACL    |
+    ARCHIVE_EXTRACT_FFLAGS |
+    ARCHIVE_EXTRACT_PERM   |
+    ARCHIVE_EXTRACT_TIME
+  );
+  archive_write_disk_set_standard_lookup(outFile.get());
+  // loop through archive contents and extract to disk
+  while (true)
+  {
+    // extract entry metadata
+    struct archive_entry* entry{};
+    if (!CheckArchiveResult(archive_read_next_header(arch.get(), &entry),
+        "Issue while reading archive entry", arch))
+    {
+      break;
+    }
+    // make the output file relative to server install path
+    const auto outFilePath{serverInstallPath / archive_entry_pathname_w(entry)};
+    archive_entry_copy_pathname_w(entry, outFilePath.generic_wstring().data());
+    // create output file for entry
+    result = archive_write_header(outFile.get(), entry);
+    if (result < ARCHIVE_OK)
+    {
+      std::cout << "WARNING: Issue while creating output file " << outFilePath << ": " << archive_error_string(outFile.get()) << "\n";
+    }
+    else if
+    (
+      archive_entry_size(entry) > 0 && !CheckArchiveResult(
+        // write output file data
+        CopyArchiveData(arch, outFile),
+        std::string{"Issue while writing output file "} +
+          outFilePath.generic_string(), outFile)
+    )
+    {
+      break;
+    }
+    // finalize output file
+    if (!CheckArchiveResult(archive_write_finish_entry(outFile.get()),
+        std::string{"Issue while finalizing output file "} +
+          outFilePath.generic_string(), outFile))
+    {
+      break;
+    }
+    std::cout << "Extracted file " << outFilePath << "\n";
+    FixPermissions(outFilePath);
+  }
+  archive_read_close(arch.get());
+  archive_write_close(outFile.get());
+}
+
 std::string_view GetFrameworkURL(
   const rustLaunchSite::Config::ModFrameworkType framework
 )
@@ -165,9 +308,17 @@ const std::vector<std::string_view> FRAMEWORK_ASSET
   // NONE
   "",
   // CARBON
+#if _MSC_VER || defined(__MINGW32__)
   "Carbon.Windows.Release.zip",
+#else
+  "Carbon.Linux.Release.tar.gz",
+#endif
   // OXIDE
+#if _MSC_VER || defined(__MINGW32__)
   "Oxide.Rust.zip"
+#else
+  "Oxide.Rust-linux.zip"
+#endif
 };
 
 std::string_view GetFrameworkAsset(
@@ -194,6 +345,8 @@ Updater::Updater(
   : cfgSptr_(cfgSptr)
   , downloaderSptr_(downloaderSptr)
   , serverInstallPath_(cfgSptr->GetInstallPath())
+  , appManifestPath_(cfgSptr->GetInstallPath() / "steamapps/appmanifest_258550.acf")
+  , steamCmdPath_(cfgSptr->GetSteamcmdPath())
   , downloadPath_(cfgSptr->GetPathsDownload())
   , frameworkDllPath_(GetFrameworkDllPath(
       serverInstallPath_, cfgSptr->GetUpdateModFrameworkType()))
@@ -203,13 +356,16 @@ Updater::Updater(
   {
     throw std::invalid_argument(std::string("ERROR: Server install path does not exist: ") + serverInstallPath_.string());
   }
+#if _MSC_VER || defined(__MINGW32__)
   if (!std::filesystem::exists(serverInstallPath_ / "RustDedicated.exe"))
+#else
+  if (!std::filesystem::exists(serverInstallPath_ / "RustDedicated"))
+#endif
   {
     throw std::invalid_argument(std::string("ERROR: Rust dedicated server not found in configured install path: ") + serverInstallPath_.string());
   }
 
-  // derive the Steam app manifest path from the configured install location
-  appManifestPath_ = serverInstallPath_ / "steamapps/appmanifest_258550.acf";
+/*
   if (std::filesystem::exists(appManifestPath_))
   {
     // extract SteamCMD utility path from manifest
@@ -225,9 +381,17 @@ Updater::Updater(
     }
   }
   else
+*/
+  if (!std::filesystem::exists(appManifestPath_))
   {
     std::cout << "WARNING: Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled\n";
     appManifestPath_.clear();
+  }
+
+  if (!std::filesystem::exists(steamCmdPath_))
+  {
+    std::cout << "WARNING: Failed to locate SteamCMD at config file specified path " << steamCmdPath_ << "; automatic Steam updates disabled\n";
+    steamCmdPath_.clear();
   }
 
   if (
@@ -309,130 +473,17 @@ void Updater::UpdateFramework(const bool suppressWarning) const
     return;
   }
 
-  // download latest Carbon/Oxide release
+  // get URL of latest Carbon/Oxide release archive
   const auto& url{GetLatestFrameworkURL()};
   if (url.empty())
   {
     std::cout << "WARNING: Cannot update " << frameworkTitle << " because download URL was not found\n";
     return;
   }
-  // this is now downloaded into RAM because kubazip seems to interact weirdly
-  //  with std::filesystem on Windows + MSYS MinGW
-  const std::vector<char>& zipData{downloaderSptr_->GetUrlToVector(url)};
-  if (zipData.empty())
-  {
-    std::cout << "ERROR: Cannot update " << frameworkTitle << " because data was not downloaded from URL " << url << "\n";
-    return;
-  }
-
-  // unzip Carbon/Oxide release into server installation directory
-  // NOTE: both plugin frameworks currently release .zip files that are intended
-  //  to be extracted directly into the server installation root
-  //
-  // first, get the number of files in the zip
-  // TODO: use zip_stream_openwitherror() if vcpkg updates to newer kubazip
-  zip_t* zipPtr(zip_stream_open(zipData.data(), zipData.size(), 0, 'r'));
-  if (!zipPtr)
-  {
-    std::cout << "ERROR: Failed to open zip data with length=" << zipData.size() << " downloaded from URL " << url << "\n";
-    return;
-  }
-  const ssize_t zipEntries(zip_entries_total(zipPtr));
-  if (zipEntries <= 0)
-  {
-    std::cout << "ERROR: Failed to get valid file count from downloaded zip data with length=" << zipData.size() << ": " << zip_strerror(static_cast<int>(zipEntries)) << "\n";
-    zip_close(zipPtr);
-    return;
-  }
-  // loop over all zip entries
-  for (ssize_t i{0}; i < zipEntries; ++i)
-  {
-    if
-    (
-      const auto openResult{zip_entry_openbyindex(zipPtr, i)};
-      openResult
-    )
-    {
-      std::cout << "ERROR: Failed to open zip entry - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(openResult) << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    std::string_view entryName{zip_entry_name(zipPtr)};
-    if (entryName.empty())
-    {
-      std::cout << "ERROR: Failed to determine zip entry name - " << frameworkTitle << " installation may now be corrupt!\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    const int isDirStatus{zip_entry_isdir(zipPtr)};
-    if (isDirStatus < 0)
-    {
-      std::cout << "ERROR: Failed to determine zip entry '" << entryName << "' directory status - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(isDirStatus) << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    // kubazip seems to always return isDir=0, even for obvious directory
-    //  entries whose names end in a slash, so add that to the heuristic
-    const bool isDir{isDirStatus != 0 || entryName.back() == '/' || entryName.back() == '\\'};
-    // calculate the full path relative to server installation
-    std::filesystem::path entryPath{(serverInstallPath_ / entryName).make_preferred()};
-    std::cout << "Extracting zip entry #" << i+1 << "/" << zipEntries << ": " << (isDir ? "Directory" : "File") << " '" << entryName << "' to '" << entryPath << "'\n";
-    // get the parent path if a file, or the full path if a dir
-    std::filesystem::path containingDir{isDir ? entryPath : entryPath.parent_path()};
-    // std::cout << "Creating path (unless it already exists): '" << containingDir << "'\n";
-    // create the directory tree
-    if
-    (
-      std::error_code ec{};
-      // false is returned if dir already exists, so need to check ec also
-      !std::filesystem::create_directories(containingDir, ec) && ec
-    )
-    {
-      std::cout << "ERROR: Failed to replicate path '" << containingDir << "' - " << frameworkTitle << " installation may now be corrupt! Error: " << ec.message() << "\n";
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    if (isDir)
-    {
-      // nothing else to do for a directory
-      zip_entry_close(zipPtr);
-      continue;
-    }
-    // this is a file, so extract it
-    // start by opening the destination, truncating if it already exists
-    std::fstream outFile
-    {
-      entryPath, std::ios::binary | std::ios_base::out | std::ios_base::trunc
-    };
-    if (!outFile.is_open() || outFile.fail())
-    {
-      std::cout << "ERROR: Failure opening file '" << entryPath << "' for write - " << frameworkTitle << " installation may now be corrupt!\n";
-      outFile.close();
-      zip_entry_close(zipPtr);
-      zip_close(zipPtr);
-      return;
-    }
-    // now pass this to kubazip with pointer to a callback that will chunk the
-    //  data out to the file
-    if
-    (
-      const int extractResult
-      {
-        zip_entry_extract(zipPtr, ZipExtractToFile, &outFile)
-      };
-      extractResult
-    )
-    {
-      std::cout << "ERROR: Failure extracting file '" << entryPath << "' from zip - " << frameworkTitle << " installation may now be corrupt! Error: " << zip_strerror(extractResult) << "\n";
-    }
-    outFile.close();
-    zip_entry_close(zipPtr);
-  }
-  zip_close(zipPtr);
+  // download archive to RAM
+  const std::vector<char>& archData{downloaderSptr_->GetUrlToVector(url)};
+  // extract archive
+  ExtractArchiveData(archData, url, frameworkTitle, serverInstallPath_);
 }
 
 void Updater::UpdateServer() const
@@ -527,6 +578,7 @@ std::string Updater::GetInstalledFrameworkVersion() const
 {
   std::string retVal;
   if (frameworkDllPath_.empty()) { return retVal; }
+#if _MSC_VER || defined(__MINGW32__)
   // run powershell and grab all output into inStream
   boost::process::ipstream inStream;
   // for some reason boost requires explicitly requesting a PATH search unless
@@ -563,6 +615,70 @@ std::string Updater::GetInstalledFrameworkVersion() const
   while (retVal.back() == '\r' || retVal.back() == '\n') { retVal.pop_back(); }
   // strip off anything starting with `+` or `-` if present
   return retVal.substr(0, retVal.find_first_of("+-"));
+#else
+  // run monodis and grab all output into inStream
+  boost::process::ipstream inStream;
+  // for some reason boost requires explicitly requesting a PATH search unless
+  //  we want to pass the entire command as a single string
+  const auto& psPath{boost::process::search_path("monodis")};
+  if (psPath.empty())
+  {
+    std::cout << "ERROR: Failed to find monodis; you may need to install mono-utils or similar\n";
+    return retVal;
+  }
+  std::error_code errorCode;
+  const int exitCode(boost::process::system(
+    boost::process::exe(psPath),
+    boost::process::args({
+      "--assembly",
+      frameworkDllPath_.string()
+    }),
+    boost::process::std_out > inStream,
+    boost::process::error(errorCode)
+  ));
+  if (errorCode)
+  {
+    std::cout << "ERROR: Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message() << "\n";
+    return retVal;
+  }
+  if (exitCode)
+  {
+    std::cout << "ERROR: " << psPath << " returned nonzero exit code: " << exitCode << "\n";
+    return retVal;
+  }
+  // find the line that begins with "Version:"
+  std::string line;
+  while (std::getline(inStream, line))
+  {
+    if (0 == line.find("Version:"))
+    {
+      // grab everything after "Version:" and after any spaces
+      retVal = line.substr(line.find_first_not_of(' ', 8));
+      break;
+    }
+  }
+  // chop off anything from the third version separator onwards (if present)
+  std::size_t sepCount{0};
+  std::size_t sepPos{};
+  for (std::size_t i{0}; i < retVal.length(); ++i)
+  {
+    if ('.' == retVal.at(i))
+    {
+      ++sepCount;
+      if (3 == sepCount)
+      {
+        sepPos = i;
+        break;
+      }
+    }
+  }
+  if (sepCount > 2 && sepPos > 0)
+  {
+    retVal.resize(sepPos);
+  }
+  // return version number or empty string
+  return retVal;
+#endif
 }
 
 std::string Updater::GetInstalledServerBranch() const
@@ -719,10 +835,7 @@ std::string Updater::GetLatestFrameworkURL() const
   try
   {
     const auto& j(nlohmann::json::parse(frameworkInfo));
-    // "assets" node is a list of release files
-    // there's usually a Linux release that we want to ignore for now
-    // TODO: choose the linux version when appropriate if RLS ever gets
-    //  ported to that OS
+    // "assets" node is a list of release files, so find the one of interest
     for (const auto& asset : j["assets"])
     {
       if (asset["name"].get<std::string>() == frameworkAsset)

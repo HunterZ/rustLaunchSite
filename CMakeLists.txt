@@ -36,7 +36,7 @@ set(BOOST_USE_RELEASE_LIBS $<NOT:$<CONFIG:Debug>>)
 find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
-find_package(kubazip CONFIG REQUIRED)
+find_package(LibArchive REQUIRED) # no config-mode file provided for this one
 find_package(nlohmann_json CONFIG REQUIRED)
 
 # build ctrl-c library (as static for simplicity)
@@ -70,16 +70,22 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ctrl-c
   CURL::libcurl
   ixwebsocket::ixwebsocket
-  kubazip::kubazip
+  LibArchive::LibArchive
   nlohmann_json::nlohmann_json
 )
 target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
 
 add_custom_command(TARGET ${PROJECT_NAME}
   POST_BUILD
-  DEPENDS ${PROJECT_NAME}
+  # DEPENDS ${PROJECT_NAME}
   COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
     ARGS "--strip-all" "$<TARGET_FILE:${PROJECT_NAME}>"
+)
+
+file(CREATE_LINK "${CMAKE_BINARY_DIR}/compile_commands.json"
+  "${CMAKE_SOURCE_DIR}/compile_commands.json"
+  COPY_ON_ERROR
+  SYMBOLIC
 )
 
 # add_executable(downloaderTest

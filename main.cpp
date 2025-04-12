@@ -375,8 +375,8 @@ int main(int argc, char* argv[])
         const auto [updateServerOnInterval, updateModFrameworkOnInterval] =
           UpdateCheck(
             *updaterUptr
-          , configSptr->GetUpdateServerOnStartup()
-          , configSptr->GetUpdateModFrameworkOnStartup()
+          , configSptr->GetUpdateServerOnInterval()
+          , configSptr->GetUpdateModFrameworkOnInterval()
           , configSptr->GetUpdateModFrameworkOnServerUpdate())
         ;
         // if any are needed: take server down, install updates, relaunch server

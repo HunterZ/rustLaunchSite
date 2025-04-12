@@ -2,9 +2,25 @@
   "version": 6,
   "configurePresets": [
     {
-      "name": "ninja-multi-vcpkg",
+      "name": "ninja",
       "hidden": true,
-      "generator": "Ninja Multi-Config",
+      "generator": "Ninja"
+    },
+    {
+      "name": "ninja-multi",
+      "hidden": true,
+      "generator": "Ninja Multi-Config"
+    },
+    {
+      "name": "static",
+      "hidden": true,
+      "cacheVariables": {
+        "RLS_STATIC": "ON"
+      }
+    },
+    {
+      "name": "vcpkg",
+      "hidden": true,
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -19,30 +35,39 @@
       }
     },
     {
-      "name": "static",
-      "hidden": true,
-      "cacheVariables": {
-        "RLS_STATIC": "ON"
-      }
+      "name": "x64-linux",
+      "description": "Linux x64 w/static linkage",
+      "inherits": [
+        "ninja-multi",
+        "static",
+        "vcpkg"
+      ]
     },
     {
       "name": "x64-mingw-static",
-      "description": "MinGW64 w/static linkage",
+      "description": "MinGW x64 w/static linkage",
       "inherits": [
-        "ninja-multi-vcpkg",
-        "static"
+        "ninja-multi",
+        "static",
+        "vcpkg"
       ]
     },
     {
       "name": "x64-windows-static",
-      "description": "MSVC w/static linkage",
+      "description": "MSVC x64 w/static linkage",
       "inherits": [
-        "ninja-multi-vcpkg",
-        "static"
+        "ninja-multi",
+        "static",
+        "vcpkg"
       ]
     }
   ],
   "buildPresets": [
+    {
+      "name": "common",
+      "hidden": true,
+      "verbose": true
+    },
     {
       "name": "Debug",
       "hidden": true,
@@ -54,34 +79,56 @@
       "configuration": "Release"
     },
     {
+      "name": "x64-linux-debug",
+      "configurePreset": "x64-linux",
+      "description": "Linux x64 Debug w/static linkage",
+      "inherits": [
+        "common",
+        "Debug"
+      ]
+    },
+    {
+      "name": "x64-linux-release",
+      "configurePreset": "x64-linux",
+      "description": "Linux x64 Release w/static linkage",
+      "inherits": [
+        "common",
+        "Release"
+      ]
+    },
+    {
       "name": "x64-mingw-static-debug",
       "configurePreset": "x64-mingw-static",
-      "description": "MinGW64 Debug w/static linkage",
+      "description": "MinGW x64 Debug w/static linkage",
       "inherits": [
+        "common",
         "Debug"
       ]
     },
     {
       "name": "x64-mingw-static-release",
       "configurePreset": "x64-mingw-static",
-      "description": "MinGW64 Release w/static linkage",
+      "description": "MinGW x64 Release w/static linkage",
       "inherits": [
+        "common",
         "Release"
       ]
     },
     {
       "name": "x64-windows-static-debug",
       "configurePreset": "x64-windows-static",
-      "description": "MSVC Debug w/static linkage",
+      "description": "MSVC x64 Debug w/static linkage",
       "inherits": [
+        "common",
         "Debug"
       ]
     },
     {
       "name": "x64-windows-static-release",
       "configurePreset": "x64-windows-static",
-      "description": "MSVC Release w/static linkage",
+      "description": "MSVC x64 Release w/static linkage",
       "inherits": [
+        "common",
         "Release"
       ]
     }
