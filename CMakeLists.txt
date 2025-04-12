@@ -82,10 +82,19 @@ add_custom_command(TARGET ${PROJECT_NAME}
     ARGS "--strip-all" "$<TARGET_FILE:${PROJECT_NAME}>"
 )
 
-file(CREATE_LINK "${CMAKE_BINARY_DIR}/compile_commands.json"
+# clangd can't find compile_commands.json in presets mode, so create a link to
+#  it in the project root directory (this is a hard link so that it also works
+#  on Windows)
+# note that it may not exist soon enough, since it's generated during configure,
+#  so a touch action is used to create a temporary stand-in first if needed
+set(COMPILE_COMMANDS_PATH "${CMAKE_BINARY_DIR}/compile_commands.json")
+if(NOT EXISTS "${COMPILE_COMMANDS_PATH}")
+  file(TOUCH "${COMPILE_COMMANDS_PATH}")
+endif()
+file(CREATE_LINK
+  "${COMPILE_COMMANDS_PATH}"
   "${CMAKE_SOURCE_DIR}/compile_commands.json"
   COPY_ON_ERROR
-  SYMBOLIC
 )
 
 # add_executable(downloaderTest
