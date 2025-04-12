@@ -54,6 +54,7 @@ jobs:
     defaults:
       run:
         shell: "\
+          ${{ matrix.triplet == 'x64-linux' && 'bash' || '' }}\
           ${{ matrix.triplet == 'x64-mingw-static' && 'msys2 {0}' || '' }}\
           ${{ matrix.triplet == 'x64-windows-static' && 'cmd' || '' }}"
 
