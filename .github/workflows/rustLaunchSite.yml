@@ -106,6 +106,7 @@ jobs:
           echo "VCPKG_ROOT=${VCPKG_ROOT}" | ${FIX_PATH} >> "${GITHUB_ENV}"
           export VCPKG_BOOT="./bootstrap-vcpkg${SCRIPT_EXT}"
           echo "VCPKG_BOOT=${VCPKG_BOOT}" | ${FIX_PATH} >> "${GITHUB_ENV}"
+          echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE}, SETENV_PATH=${SETENV_PATH}, VCPKG_ROOT=${VCPKG_ROOT}, VCPKG_BOOT=${VCPKG_BOOT}"
 
       - name: Setup git workspace
         uses: actions/checkout@v4
@@ -139,10 +140,10 @@ jobs:
           cache-name: cache-out-directory
         with:
           path: |
-            "${{github.workspace}}/out/build"
-            !"${{github.workspace}}/out/build/Debug"
-            !"${{github.workspace}}/out/build/Release"
-            !"${{github.workspace}}/out/build/RelWithDebInfo"
+            "${{ github.workspace }}/out/build"
+            !"${{ github.workspace }}/out/build/Debug"
+            !"${{ github.workspace }}/out/build/Release"
+            !"${{ github.workspace }}/out/build/RelWithDebInfo"
           # Hash on anything that can affect dependencies
           key: ${{ env.cache-name }}-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
           # it's acceptable to reuse caches for different CMakeLists content if
@@ -165,3 +166,8 @@ jobs:
         with:
           name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ matrix.triplet }}-${{ matrix.buildtype }}"
           path: "${{ github.workspace }}/out/install/${{ matrix.triplet }}"
+
+      - name: List workspace contents
+        shell: bash
+        run: |
+          find "${{ github.workspace }}"
