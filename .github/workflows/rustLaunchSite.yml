@@ -145,6 +145,7 @@ jobs:
         run: >-
           cmake --version && cmake --help &&
           ${{ env.SETENV_PATH }} &&
+          cmake --version && cmake --help &&
           cmake --preset "${{ matrix.triplet }}"
       - name: Build and stage project
         run: >-
