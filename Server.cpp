@@ -18,6 +18,7 @@
 #if _MSC_VER || defined(__MINGW32__)
   #include <boost/process/v1/windows.hpp>
 #else
+  #include <boost/process/v1/group.hpp>
   #include <cerrno>
   #include <csignal>
 #endif
@@ -86,7 +87,7 @@ struct ProcessImpl
 {
   std::unique_ptr<boost::process::v1::child> processUptr_;
 #if (!_MSC_VER && !defined(__MINGW32__))
-  boost::process::group processGroup_{};
+  boost::process::v1::group processGroup_{};
 #endif
 };
 
@@ -293,7 +294,7 @@ bool Server::IsRunning() const
   // TODO: do we also need to check for nonzero pid like with
   //  tiny-process-library, or is boost::process smarter?
   auto& process{*(processImplUptr_->processUptr_)};
-  std::error_code errorCode;
+  std::error_code errorCode{};
   return (process.running(errorCode));
 }
 

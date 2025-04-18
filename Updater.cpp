@@ -633,24 +633,24 @@ std::string Updater::GetInstalledFrameworkVersion() const
   return retVal.substr(0, retVal.find_first_of("+-"));
 #else
   // run monodis and grab all output into inStream
-  boost::process::ipstream inStream;
+  boost::process::v1::ipstream inStream;
   // for some reason boost requires explicitly requesting a PATH search unless
   //  we want to pass the entire command as a single string
-  const auto& psPath{boost::process::search_path("monodis")};
+  const auto& psPath{boost::process::v1::search_path("monodis")};
   if (psPath.empty())
   {
     std::cout << "ERROR: Failed to find monodis; you may need to install mono-utils or similar\n";
     return retVal;
   }
   std::error_code errorCode;
-  const int exitCode(boost::process::system(
-    boost::process::exe(psPath),
-    boost::process::args({
+  const int exitCode(boost::process::v1::system(
+    boost::process::v1::exe(psPath),
+    boost::process::v1::args({
       "--assembly",
       frameworkDllPath_.string()
     }),
-    boost::process::std_out > inStream,
-    boost::process::error(errorCode)
+    boost::process::v1::std_out > inStream,
+    boost::process::v1::error(errorCode)
   ));
   if (errorCode)
   {
