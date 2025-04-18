@@ -160,10 +160,10 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            "${{ github.workspace }}/out/build/**"
-            !"${{ github.workspace }}/out/build/Debug/**"
-            !"${{ github.workspace }}/out/build/Release/**"
-            !"${{ github.workspace }}/out/build/RelWithDebInfo/**"
+            ${{ github.workspace }}/out/build
+            !${{ github.workspace }}/out/build/Debug
+            !${{ github.workspace }}/out/build/Release
+            !${{ github.workspace }}/out/build/RelWithDebInfo
           key: cache-build-directory-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
 
       # - name: List workspace contents
