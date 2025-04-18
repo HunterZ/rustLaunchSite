@@ -117,7 +117,7 @@ jobs:
       - name: Restore build cache
         uses: actions/cache/restore@v4
         with:
-          path: "${{ github.workspace }}/out/build"
+          path: ${{ github.workspace }}/out/build
           key: cache-build-directory-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
 
       - name: Setup vcpkg (1/3)
