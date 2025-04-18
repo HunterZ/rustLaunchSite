@@ -114,6 +114,12 @@ jobs:
         with:
           submodules: true
 
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: "${{ github.workspace }}/out/build"
+          key: cache-build-directory-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
+
       - name: Setup vcpkg (1/3)
         uses: actions/checkout@v4
         with:
@@ -135,24 +141,6 @@ jobs:
           ${{ env.VCPKG_BOOT }} -disableMetrics &&
           popd
 
-      - name: Setup build cache
-        uses: actions/cache@v4
-        env:
-          cache-name: cache-build-directory
-        with:
-          path: |
-            "${{ github.workspace }}/out/build/**"
-            !"${{ github.workspace }}/out/build/Debug/**"
-            !"${{ github.workspace }}/out/build/Release/**"
-            !"${{ github.workspace }}/out/build/RelWithDebInfo/**"
-          # Hash on anything that can affect dependencies
-          key: ${{ env.cache-name }}-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
-          # it's acceptable to reuse caches for different CMakeLists content if
-          #  exact match is not available as long as the build flavor matches
-          #  exactly
-          restore-keys: |
-            ${{ env.cache-name }}-${{ matrix.triplet }}-${{ matrix.buildtype }}
-
       - name: Configure project
         run: >-
           ${{ env.SETENV_PATH }} &&
@@ -167,6 +155,16 @@ jobs:
         with:
           name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ matrix.triplet }}-${{ matrix.buildtype }}"
           path: "${{ github.workspace }}/out/install/${{ matrix.triplet }}"
+
+      - name: Save build cache
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            "${{ github.workspace }}/out/build/**"
+            !"${{ github.workspace }}/out/build/Debug/**"
+            !"${{ github.workspace }}/out/build/Release/**"
+            !"${{ github.workspace }}/out/build/RelWithDebInfo/**"
+          key: cache-build-directory-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
 
       # - name: List workspace contents
       #   shell: bash
