@@ -1,6 +1,6 @@
 #include "Config.h"
 
-#include <boost/process.hpp>
+#include <boost/process/v1/search_path.hpp>
 #include <iostream>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -206,9 +206,18 @@ Config::Config(std::filesystem::path configFile)
       seedStrategy_ = SeedStrategy::RANDOM;
       const auto& seedStrategy{
         GetOptionalValue<std::string>(jRlsSeed, "strategy")};
-      if (seedStrategy == "fixed") { seedStrategy_ = SeedStrategy::FIXED; }
-      else if (seedStrategy == "list") { seedStrategy_ = SeedStrategy::LIST; }
-      else if (seedStrategy == "random") { seedStrategy_ = SeedStrategy::RANDOM; }
+      if (seedStrategy == "fixed")
+      {
+        seedStrategy_ = SeedStrategy::FIXED;
+      }
+      else if (seedStrategy == "list")
+      {
+        seedStrategy_ = SeedStrategy::LIST;
+      }
+      else if (seedStrategy == "random")
+      {
+        seedStrategy_ = SeedStrategy::RANDOM;
+      }
       else if (!seedStrategy.empty())
       {
         throw std::invalid_argument(
@@ -260,7 +269,7 @@ Config::Config(std::filesystem::path configFile)
     if (!std::filesystem::exists(steamcmdPath_))
     {
       steamcmdPath_ =
-        boost::process::search_path("steamcmd").generic_wstring();
+        boost::process::v1::search_path("steamcmd").generic_wstring();
     }
     steamcmdPath_.make_preferred();
     if (std::filesystem::exists(steamcmdPath_))

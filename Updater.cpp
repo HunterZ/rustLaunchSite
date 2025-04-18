@@ -8,11 +8,18 @@
   #include <SDKDDKVer.h>
 #endif
 
-#include <archive.h>
-#include <boost/process.hpp>
+#include <boost/process/v1/args.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/error.hpp>
+#include <boost/process/v1/exe.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/pipe.hpp>
+#include <boost/process/v1/search_path.hpp>
+#include <boost/process/v1/system.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
-// this must be included after boost, because it #include's Windows.h
+// these must be included after boost, because it #include's Windows.h
+#include <archive.h>
 #include <archive_entry.h>
 #include <fstream>
 #include <iostream>
@@ -424,8 +431,12 @@ Updater::~Updater() = default;
 
 bool Updater::CheckFramework() const
 {
-  if (cfgSptr_->GetUpdateModFrameworkType() == Config::ModFrameworkType::NONE) { return false; }
-  const auto& frameworkTitle{ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE)};
+  if (cfgSptr_->GetUpdateModFrameworkType() == Config::ModFrameworkType::NONE)
+  {
+    return false;
+  }
+  const auto& frameworkTitle{
+    ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE)};
   const auto& currentVersion(GetInstalledFrameworkVersion());
   std::cout << "CheckFramework(): Installed " << frameworkTitle << " version: '" << currentVersion << "'\n";
   const auto& latestVersion(GetLatestFrameworkVersion());
@@ -452,8 +463,12 @@ bool Updater::CheckServer() const
 
 void Updater::UpdateFramework(const bool suppressWarning) const
 {
-  if (cfgSptr_->GetUpdateModFrameworkType() == Config::ModFrameworkType::NONE) { return; }
-  const auto& frameworkTitle{ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE)};
+  if (cfgSptr_->GetUpdateModFrameworkType() == Config::ModFrameworkType::NONE)
+  {
+    return;
+  }
+  const auto& frameworkTitle{
+    ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE)};
   // abort if Carbon/Oxide was not already installed
   // this should also catch the case that this is called when update checking is
   //  disabled, but we don't explicity support that
@@ -519,10 +534,10 @@ void Updater::UpdateServer() const
   // }
   // std::cout<< "\n";
   std::error_code errorCode;
-  const int exitCode(boost::process::system(
-    boost::process::exe(steamCmdPath_.string()),
-    boost::process::args(args),
-    boost::process::error(errorCode)
+  const int exitCode(boost::process::v1::system(
+    boost::process::v1::exe(steamCmdPath_.string()),
+    boost::process::v1::args(args),
+    boost::process::v1::error(errorCode)
   ));
   if (errorCode)
   {
@@ -580,24 +595,25 @@ std::string Updater::GetInstalledFrameworkVersion() const
   if (frameworkDllPath_.empty()) { return retVal; }
 #if _MSC_VER || defined(__MINGW32__)
   // run powershell and grab all output into inStream
-  boost::process::ipstream inStream;
+  boost::process::v1::ipstream inStream;
   // for some reason boost requires explicitly requesting a PATH search unless
   //  we want to pass the entire command as a single string
-  const auto psPath(boost::process::search_path("powershell.exe"));
+  const auto& psPath{boost::process::v1::search_path("powershell.exe")};
   if (psPath.empty())
   {
     std::cout << "ERROR: Failed to find powershell\n";
     return retVal;
   }
   std::error_code errorCode;
-  const int exitCode(boost::process::system(
-    boost::process::exe(psPath),
-    boost::process::args({
+  const int exitCode(boost::process::v1::system(
+    boost::process::v1::exe(psPath),
+    boost::process::v1::args({
       "-Command",
-      std::string("(Get-Item '") + frameworkDllPath_.string() + "').VersionInfo.ProductVersion"
+      std::string("(Get-Item '") + frameworkDllPath_.string() +
+        "').VersionInfo.ProductVersion"
     }),
-    boost::process::std_out > inStream,
-    boost::process::error(errorCode)
+    boost::process::v1::std_out > inStream,
+    boost::process::v1::error(errorCode)
   ));
   if (errorCode)
   {
@@ -683,7 +699,8 @@ std::string Updater::GetInstalledFrameworkVersion() const
 
 std::string Updater::GetInstalledServerBranch() const
 {
-  return GetAppManifestValue(appManifestPath_, "AppState.UserConfig.BetaKey", false);
+  return GetAppManifestValue(
+    appManifestPath_, "AppState.UserConfig.BetaKey", false);
 }
 
 std::string Updater::GetInstalledServerBuild() const
@@ -723,13 +740,13 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   ;
   scriptFile.close();
   // launch steamcmd and extract desired info
-  boost::process::ipstream fromChild; // from child to RLS
+  boost::process::v1::ipstream fromChild; // from child to RLS
   std::error_code errorCode;
-  boost::process::child sc(
-    boost::process::exe(steamCmdPath_.string()),
-    boost::process::args({"+runscript", scriptFilePath.string()}),
-    boost::process::std_out > fromChild,
-    boost::process::error(errorCode)
+  boost::process::v1::child sc(
+    boost::process::v1::exe(steamCmdPath_.string()),
+    boost::process::v1::args({"+runscript", scriptFilePath.string()}),
+    boost::process::v1::std_out > fromChild,
+    boost::process::v1::error(errorCode)
   );
   // this will hold the extracted info blob as a string
   std::string steamInfo;
@@ -826,11 +843,11 @@ std::string Updater::GetLatestFrameworkURL() const
     std::cout << "ERROR: Downloader handle is null\n";
     return {};
   }
-  const auto& modFrameworkType{cfgSptr_->GetUpdateModFrameworkType()};
-  const std::string_view frameworkURL{GetFrameworkURL(modFrameworkType)};
-  const std::string& frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
-  const std::string_view frameworkAsset{GetFrameworkAsset(modFrameworkType)};
-  const std::string_view frameworkTitle{ToString(modFrameworkType, ToStringCase::TITLE)};
+  const auto modFrameworkType{cfgSptr_->GetUpdateModFrameworkType()};
+  const auto frameworkURL{GetFrameworkURL(modFrameworkType)};
+  const auto& frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
+  const auto frameworkAsset{GetFrameworkAsset(modFrameworkType)};
+  const auto frameworkTitle{ToString(modFrameworkType, ToStringCase::TITLE)};
 
   try
   {
@@ -862,10 +879,10 @@ std::string Updater::GetLatestFrameworkVersion() const
     std::cout << "ERROR: Downloader handle is null\n";
     return {};
   }
-  const auto& modFrameworkType{cfgSptr_->GetUpdateModFrameworkType()};
-  const std::string_view frameworkURL{GetFrameworkURL(modFrameworkType)};
-  const std::string& frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
-  const std::string_view frameworkTitle{ToString(modFrameworkType, ToStringCase::TITLE)};
+  const auto modFrameworkType{cfgSptr_->GetUpdateModFrameworkType()};
+  const auto frameworkURL{GetFrameworkURL(modFrameworkType)};
+  const auto& frameworkInfo{downloaderSptr_->GetUrlToString(frameworkURL)};
+  const auto frameworkTitle{ToString(modFrameworkType, ToStringCase::TITLE)};
 
   try
   {

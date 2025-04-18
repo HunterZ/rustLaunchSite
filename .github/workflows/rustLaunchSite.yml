@@ -59,24 +59,6 @@ jobs:
           ${{ matrix.triplet == 'x64-windows-static' && 'cmd' || '' }}"
 
     steps:
-      - name: Setup build cache
-        uses: actions/cache@v4
-        env:
-          cache-name: cache-out-directory
-        with:
-          path: |
-            "${{github.workspace}}/out/build"
-            !"${{github.workspace}}/out/build/Debug"
-            !"${{github.workspace}}/out/build/Release"
-            !"${{github.workspace}}/out/build/RelWithDebInfo"
-          # Hash on anything that can affect dependencies
-          key: ${{ env.cache-name }}-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
-          # it's acceptable to reuse caches for different CMakeLists content if
-          #  exact match is not available as long as the build flavor matches
-          #  exactly
-          restore-keys: |
-            ${{ env.cache-name }}-${{ matrix.triplet }}-${{ matrix.buildtype }}
-
       - name: Setup Linux environment
         if: ${{ env.MSYSTEM == 'LINUX' }}
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -150,6 +132,24 @@ jobs:
           pushd ${{ env.VCPKG_ROOT }} &&
           ${{ env.VCPKG_BOOT }} -disableMetrics &&
           popd
+
+      - name: Setup build cache
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-out-directory
+        with:
+          path: |
+            "${{github.workspace}}/out/build"
+            !"${{github.workspace}}/out/build/Debug"
+            !"${{github.workspace}}/out/build/Release"
+            !"${{github.workspace}}/out/build/RelWithDebInfo"
+          # Hash on anything that can affect dependencies
+          key: ${{ env.cache-name }}-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('**/CMakeLists.txt', 'vcpkg.json') }}
+          # it's acceptable to reuse caches for different CMakeLists content if
+          #  exact match is not available as long as the build flavor matches
+          #  exactly
+          restore-keys: |
+            ${{ env.cache-name }}-${{ matrix.triplet }}-${{ matrix.buildtype }}
 
       - name: Configure project
         run: >-

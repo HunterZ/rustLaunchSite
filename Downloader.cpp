@@ -22,7 +22,8 @@ namespace
 // Curl requires a C-style callback handler, so this function accumulates
 //  downloaded data into a file
 std::size_t WriteToFile(
-  char const* dataPtr, std::size_t size, std::size_t nmemb, std::ofstream* filePtr
+  char const* dataPtr, std::size_t size, std::size_t nmemb,
+  std::ofstream* filePtr
 )
 {
   if (!dataPtr || !filePtr)
@@ -39,7 +40,8 @@ std::size_t WriteToFile(
 // Curl requires a C-style callback handler, so this function accumulates
 //  downloaded data into a string
 std::size_t WriteToString(
-  char const* dataPtr, std::size_t size, std::size_t nmemb, std::string* stringPtr
+  char const* dataPtr, std::size_t size, std::size_t nmemb,
+  std::string* stringPtr
 )
 {
   if (!dataPtr || !stringPtr)
@@ -55,7 +57,8 @@ std::size_t WriteToString(
 // Curl requires a C-style callback handler, so this function accumulates
 //  downloaded data into a binary data buffer
 std::size_t WriteToVector(
-  char const* dataPtr, std::size_t size, std::size_t nmemb, std::vector<char>* vPtr
+  char const* dataPtr, std::size_t size, std::size_t nmemb,
+  std::vector<char>* vPtr
 )
 {
   if (!dataPtr || !vPtr)
