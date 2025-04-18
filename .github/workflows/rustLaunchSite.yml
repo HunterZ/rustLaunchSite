@@ -107,8 +107,6 @@ jobs:
           export VCPKG_BOOT="./bootstrap-vcpkg${SCRIPT_EXT}"
           echo "VCPKG_BOOT=${VCPKG_BOOT}" | ${FIX_PATH} >> "${GITHUB_ENV}"
 
-# echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE}, SETENV_PATH=${SETENV_PATH}, VCPKG_ROOT=${VCPKG_ROOT}, VCPKG_BOOT=${VCPKG_BOOT}"
-
       - name: Setup git workspace
         uses: actions/checkout@v4
         with:
@@ -119,11 +117,11 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/out/build
-            !${{ github.workspace }}/out/build/Debug
-            !${{ github.workspace }}/out/build/Release
-            !${{ github.workspace }}/out/build/RelWithDebInfo
+            ${{ github.workspace }}/vcpkg
           key:
-            cache-build-${{ matrix.triplet }}-${{ matrix.buildtype }}
+            cache-build-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeFiles.txt', 'vcpkg.json', 'out/build/*/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/*/vcpkg_installed/status') }}
+          restore-keys: |
+            cache-build-${{ matrix.triplet }}-${{ matrix.buildtype }}-
 
       - name: Setup vcpkg (1/3)
         uses: actions/checkout@v4
@@ -148,9 +146,7 @@ jobs:
 
       - name: Configure project
         run: >-
-          cmake --version && cmake --help &&
           ${{ env.SETENV_PATH }} &&
-          cmake --version && cmake --help &&
           cmake --preset "${{ matrix.triplet }}"
       - name: Build and stage project
         run: >-
