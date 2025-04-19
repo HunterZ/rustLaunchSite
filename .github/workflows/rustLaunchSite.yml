@@ -64,7 +64,7 @@ jobs:
           packages: cmake ninja
           version: 1.0
 
-      - name: Setup MSVC environment (1/2)
+      - name: Setup MSVC environment
         if: ${{ env.MSYSTEM == 'MSVC' }}
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -73,17 +73,6 @@ jobs:
           # toolset: "14.40.33810"
           uwp: false
           # vsversion: "17.10.35013.160"
-      # - name: Setup MSVC environment (2/3)
-      #   if: ${{ env.MSYSTEM == 'MSVC' }}
-      #   uses: Cyberboss/install-winget@v1
-      #   with:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #     wget_release_id: latest
-      - name: Setup MSVC environment (2/2)
-        if: ${{ env.MSYSTEM == 'MSVC' }}
-        run: |
-          winget install Kitware.CMake --disable-interactivity --accept-source-agreements
-          winget install Ninja-build.Ninja --disable-interactivity --accept-source-agreements
       # - name: Setup MSVC environment (2/2)
       #   if: ${{ env.MSYSTEM == 'MSVC' }}
       #   run: |
