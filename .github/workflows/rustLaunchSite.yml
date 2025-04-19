@@ -13,7 +13,7 @@ permissions:
 # env vars common to all jobs
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_DISABLE_METRICS: true
 
 jobs:
@@ -73,10 +73,21 @@ jobs:
           # toolset: "14.40.33810"
           uwp: false
           # vsversion: "17.10.35013.160"
-      - name: Setup MSVC environment (2/2)
+      - name: Setup MSVC environment (2/3)
+        if: ${{ env.MSYSTEM == 'MSVC' }}
+        uses: Cyberboss/install-winget@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          wget_release_id: latest
+      - name: Setup MSVC environment (2/3)
         if: ${{ env.MSYSTEM == 'MSVC' }}
         run: |
-          choco install cmake ninja
+          winget install Kitware.CMake --disable-interactivity --accept-source-agreements
+          winget install Ninja-build.Ninja --disable-interactivity --accept-source-agreements
+      # - name: Setup MSVC environment (2/2)
+      #   if: ${{ env.MSYSTEM == 'MSVC' }}
+      #   run: |
+      #     choco install cmake ninja
 
       - name: Setup MSYS2 environment (1/2)
         if: ${{ env.MSYSTEM == 'MINGW64' }}
@@ -110,16 +121,16 @@ jobs:
         with:
           submodules: true
 
-      # - name: Setup build cache
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: |
-      #       ${{ github.workspace }}/out/build
-      #       ${{ github.workspace }}/vcpkg
-      #     key:
-      #       cache-build-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeFiles.txt', 'vcpkg.json', 'out/build/*/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/*/vcpkg_installed/status') }}
-      #     restore-keys: |
-      #       cache-build-${{ matrix.triplet }}-${{ matrix.buildtype }}-
+      - name: Setup build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/out/build
+            ${{ github.workspace }}/vcpkg
+          key:
+            cache-build-${{ matrix.triplet }}-${{ matrix.buildtype }}-${{ hashFiles('CMakeFiles.txt', 'vcpkg.json', 'out/build/*/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/*/vcpkg_installed/status') }}
+          restore-keys: |
+            cache-build-${{ matrix.triplet }}-${{ matrix.buildtype }}-
 
       - name: Setup vcpkg (1/3)
         uses: actions/checkout@v4
