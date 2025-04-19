@@ -31,6 +31,7 @@
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "VCPKG_HOST_TRIPLET": "${presetName}",
+        "VCPKG_INSTALL_OPTIONS": "--debug;--no-print-usage",
         "VCPKG_TARGET_TRIPLET": "${presetName}"
       }
     },
