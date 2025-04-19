@@ -33,7 +33,7 @@ set(BOOST_USE_DEBUG_LIBS $<CONFIG:Debug>)
 set(BOOST_USE_RELEASE_LIBS $<NOT:$<CONFIG:Debug>>)
 
 # use config mode to prefer vcpkg versions
-find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
+find_package(Boost CONFIG REQUIRED COMPONENTS filesystem process)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(LibArchive REQUIRED) # no config-mode file provided for this one
@@ -67,6 +67,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
   Boost::boost
   Boost::filesystem
+  Boost::process
   ctrl-c
   CURL::libcurl
   ixwebsocket::ixwebsocket

@@ -9,11 +9,16 @@
 #endif
 
 // #include <boost/winapi/show_window.hpp>
-#include <boost/process.hpp>
-#include <boost/process/extend.hpp>
+#include <boost/process/v1/args.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/exe.hpp>
+#include <boost/process/v1/extend.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/start_dir.hpp>
 #if _MSC_VER || defined(__MINGW32__)
-  #include <boost/process/windows.hpp>
+  #include <boost/process/v1/windows.hpp>
 #else
+  #include <boost/process/v1/group.hpp>
   #include <cerrno>
   #include <csignal>
 #endif
@@ -40,7 +45,7 @@ inline std::string QuoteString(const std::string& s)
 // boost::process extension to launch a process in a new console window
 // idea from https://stackoverflow.com/a/69774875/3171290 and
 //  https://stackoverflow.com/a/68751737/3171290
-struct WindowsCreationFlags : boost::process::extend::handler
+struct WindowsCreationFlags : boost::process::v1::extend::handler
 {
   boost::winapi::DWORD_ flags_{0};
 
@@ -52,7 +57,8 @@ struct WindowsCreationFlags : boost::process::extend::handler
   // this function will be invoked at child process constructor before spawning
   //  process
   template <typename Char, typename Sequence>
-  void on_setup(boost::process::extend::windows_executor<Char, Sequence> & ex)
+  void on_setup(
+    boost::process::v1::extend::windows_executor<Char, Sequence> & ex)
   {
     ex.creation_flags |= flags_;
     // std::cout << "Modified Windows process creation flags: " << ex.creation_flags << std::endl;
@@ -79,9 +85,9 @@ namespace rustLaunchSite
 {
 struct ProcessImpl
 {
-  std::unique_ptr<boost::process::child> processUptr_;
+  std::unique_ptr<boost::process::v1::child> processUptr_;
 #if (!_MSC_VER && !defined(__MINGW32__))
-  boost::process::group processGroup_{};
+  boost::process::v1::group processGroup_{};
 #endif
 };
 
@@ -287,8 +293,8 @@ bool Server::IsRunning() const
   if (!processImplUptr_->processUptr_) { return false; }
   // TODO: do we also need to check for nonzero pid like with
   //  tiny-process-library, or is boost::process smarter?
-  boost::process::child& process(*(processImplUptr_->processUptr_));
-  std::error_code errorCode;
+  auto& process{*(processImplUptr_->processUptr_)};
+  std::error_code errorCode{};
   return (process.running(errorCode));
 }
 
@@ -328,18 +334,18 @@ bool Server::Start()
     processImplUptr_->processUptr_.reset();
   }
   std::error_code errorCode{};
-  processImplUptr_->processUptr_ = std::make_unique<boost::process::child>(
-    boost::process::exe(rustDedicatedPath_.string()),
-    boost::process::args(rustDedicatedArguments_),
-    boost::process::start_dir(workingDirectory_.string()),
+  processImplUptr_->processUptr_ = std::make_unique<boost::process::v1::child>(
+    boost::process::v1::exe(rustDedicatedPath_.string()),
+    boost::process::v1::args(rustDedicatedArguments_),
+    boost::process::v1::start_dir(workingDirectory_.string()),
     // I/O redirect options and effects:
     // - do nothing: server takes over our console and garbles it up
     // - close any/all: server spams its logs with exceptions
     // - redirect any/all to null: server logs some things twice
-    boost::process::std_in  < boost::process::null,
-    boost::process::std_out > boost::process::null,
-    boost::process::std_err > boost::process::null,
-    boost::process::error(errorCode)
+    boost::process::v1::std_in  < boost::process::v1::null,
+    boost::process::v1::std_out > boost::process::v1::null,
+    boost::process::v1::std_err > boost::process::v1::null,
+    boost::process::v1::error(errorCode)
   #if _MSC_VER || defined(__MINGW32__)
     ,
     WindowsCreationFlags(
@@ -390,7 +396,7 @@ void Server::Stop(const std::string& reason)
     std::cout << "ERROR: Process handle/impl pointer is null" << std::endl;
     return;
   }
-  boost::process::child& process(*processImplUptr_->processUptr_);
+  auto& process(*processImplUptr_->processUptr_);
   // TODO: notify Discord someday?
   if (rconUptr_ && rconUptr_->IsConnected())
   {

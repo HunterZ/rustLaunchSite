@@ -99,7 +99,8 @@ Rcon::Rcon(
   // Rust doesn't support secure WebSocket connections, so form insecure URL
   std::stringstream s;
   s << port;
-  const std::string url(std::string("ws://") + hostOrIp + ":" + s.str() + "/" + password);
+  const std::string url{
+    std::string("ws://") + hostOrIp + ":" + s.str() + "/" + password};
   webSocket.setUrl(url);
   // Don't enable a heartbeat: Rust seems to have a mickey-mouse WebSocket
   //  implementation that doesn't support the required ping/pong protocol,
