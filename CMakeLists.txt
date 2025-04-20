@@ -39,20 +39,34 @@ find_package(ixwebsocket CONFIG REQUIRED)
 find_package(LibArchive REQUIRED) # no config-mode file provided for this one
 find_package(nlohmann_json CONFIG REQUIRED)
 
-# build ctrl-c library (as static for simplicity)
-add_library(ctrl-c STATIC
-  ctrl-c/src/ctrl-c.cpp
-  ctrl-c/src/ctrl-c.h
+# fetch dependencies that we're forced to build from source
+include(FetchContent)
+FetchContent_Declare(ctrl-c
+  GIT_REPOSITORY git@github.com:HunterZ/ctrl-c.git
+  GIT_TAG        master
 )
-target_include_directories(ctrl-c INTERFACE "${CMAKE_SOURCE_DIR}/ctrl-c/src")
+FetchContent_Declare(SrvLib
+  GIT_REPOSITORY git@github.com:HunterZ/SrvLib.git
+  GIT_TAG        master
+)
+FetchContent_MakeAvailable(ctrl-c SrvLib)
 
-# target for building the game binary
-add_executable(${PROJECT_NAME}
+set(RLS_COMPILE_FEATURES cxx_std_17)
+if(MSVC)
+  set(RLS_COMPILE_OPTIONS /W4 /WX)
+else()
+  set(RLS_COMPILE_OPTIONS -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+# build common stuff into an object library
+set(RLS_OBJECT_TARGET "${PROJECT_NAME}Obj")
+add_library(${RLS_OBJECT_TARGET} OBJECT
   Config.cpp
   Config.h
   Downloader.cpp
   Downloader.h
-  main.cpp
+  MainCommon.cpp
+  MainCommon.h
   Rcon.cpp
   Rcon.h
   Server.cpp
@@ -60,27 +74,49 @@ add_executable(${PROJECT_NAME}
   Updater.cpp
   Updater.h
 )
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
-target_compile_options(${PROJECT_NAME} PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,/W4 /WX,-Wall -Wextra -Wpedantic -Werror>
-)
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_compile_features(${RLS_OBJECT_TARGET} PUBLIC ${RLS_COMPILE_FEATURES})
+target_compile_options(${RLS_OBJECT_TARGET} PRIVATE ${RLS_COMPILE_OPTIONS})
+target_link_libraries(${RLS_OBJECT_TARGET} PRIVATE
   Boost::boost
   Boost::filesystem
   Boost::process
-  ctrl-c
   CURL::libcurl
   ixwebsocket::ixwebsocket
   LibArchive::LibArchive
   nlohmann_json::nlohmann_json
 )
-target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
+target_link_options(${RLS_OBJECT_TARGET} PRIVATE ${RLS_LINK_OPTS})
 
+
+# build a console binary
+add_executable(${PROJECT_NAME} MainConsole.cpp)
+target_compile_features(${PROJECT_NAME} PUBLIC ${RLS_COMPILE_FEATURES})
+target_compile_options(${PROJECT_NAME} PRIVATE ${RLS_COMPILE_OPTIONS})
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  ${RLS_OBJECT_TARGET}
+  ctrl-c
+)
+target_link_options(${PROJECT_NAME} PRIVATE ${RLS_LINK_OPTS})
 add_custom_command(TARGET ${PROJECT_NAME}
   POST_BUILD
-  # DEPENDS ${PROJECT_NAME}
   COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
     ARGS "--strip-all" "$<TARGET_FILE:${PROJECT_NAME}>"
+)
+
+# build a service binary
+set(RLS_SERVICE_TARGET "${PROJECT_NAME}Service")
+add_executable(${RLS_SERVICE_TARGET} MainService.cpp)
+target_compile_features(${RLS_SERVICE_TARGET} PUBLIC ${RLS_COMPILE_FEATURES})
+target_compile_options(${RLS_SERVICE_TARGET} PRIVATE ${RLS_COMPILE_OPTIONS})
+target_link_libraries(${RLS_SERVICE_TARGET} PRIVATE
+  ${RLS_OBJECT_TARGET}
+  srvlib
+)
+target_link_options(${RLS_SERVICE_TARGET} PRIVATE ${RLS_LINK_OPTS})
+add_custom_command(TARGET ${RLS_SERVICE_TARGET}
+  POST_BUILD
+  COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
+    ARGS "--strip-all" "$<TARGET_FILE:${RLS_SERVICE_TARGET}>"
 )
 
 # clangd can't find compile_commands.json in presets mode, so create a link to
@@ -157,9 +193,17 @@ if(RLS_COPY_DEPS)
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
     COMMAND_EXPAND_LISTS
   )
+  add_custom_command(TARGET ${RLS_SERVICE_TARGET}
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${RLS_SERVICE_TARGET}> $<TARGET_FILE_DIR:${RLS_SERVICE_TARGET}>
+    COMMAND_EXPAND_LISTS
+  )
 endif()
 
-install(TARGETS ${PROJECT_NAME})
+install(TARGETS
+  ${PROJECT_NAME}
+  ${RLS_SERVICE_TARGET}
+)
 install(
   FILES exampleConfig.jsonc
   TYPE DATA

@@ -1,9 +1,8 @@
 #include "Config.h"
 #include "Downloader.h"
+#include "MainCommon.h"
 #include "Server.h"
 #include "Updater.h"
-
-#include "ctrl-c.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -14,20 +13,6 @@
 
 namespace
 {
-// exit codes
-// TODO: use standard codes instead?
-//  see https://en.cppreference.com/w/cpp/error/errc
-enum RLS_EXIT
-{
-  SUCCESS = 0,
-  ARG,      // invalid_argument
-  HANDLER,  // io_error / state_not_recoverable
-  START,    // no_child_process
-  UPDATE,   // no_child_process
-  RESTART,  // no_child_process
-  EXCEPTION // interrupted
-};
-
 // timer thread state, controlled by main()
 enum class TimerState
 {
@@ -55,22 +40,6 @@ namespace threadData
   // whether main() is notifying timer thread to change state
   bool notifyTimerThread_{false};
 };
-
-bool HandleCtrlC(CtrlCLibrary::CtrlSignal s)
-{
-  if (s != CtrlCLibrary::kCtrlCSignal)
-  {
-    std::cout << "rustLaunchSite: WARNING: Ignoring unknown signal" << std::endl;
-    return false;
-  }
-  // attempt to signal main()
-  // CtrlCLibrary is pretty dodgy in terms of threading, so I don't know how
-  //  safe/robust a solution this will be
-  std::unique_lock lock{threadData::mutex_};
-  threadData::notifyMainCtrlC_ = true;
-  threadData::cvMain_.notify_all();
-  return true;
-}
 
 // (re)set start time and wake/notification times based on duration inputs
 inline void ResetTimers(
@@ -251,7 +220,9 @@ void UpdateServer(
 }
 }
 
-int main(int argc, char* argv[])
+namespace rustLaunchSite
+{
+int Start(int argc, char* argv[])
 {
   std::cout << "rustLaunchSite: Starting" << std::endl;
 
@@ -259,15 +230,6 @@ int main(int argc, char* argv[])
   {
     std::cout << "rustLaunchSite: ERROR: Configuration file/path must be specified as an argument" << std::endl;
     return RLS_EXIT::ARG;
-  }
-
-  // install Ctrl+C handler
-  // TODO: change this to an RAII wrapper so that we clean up at the end
-  const auto handlerId(CtrlCLibrary::SetCtrlCHandler(HandleCtrlC));
-  if (handlerId == CtrlCLibrary::kErrorID)
-  {
-    std::cout << "rustLaunchSite: ERROR: Failed to install Ctrl+C handler" << std::endl;
-    return RLS_EXIT::HANDLER;
   }
 
   // create null pointers for all facilities we'll be instantiating, so that we
@@ -519,4 +481,13 @@ int main(int argc, char* argv[])
   std::cout << "rustLaunchSite: Exiting" << std::endl;
 
   return retVal;
+}
+
+void Stop()
+{
+  // attempt to signal main()
+  std::unique_lock lock{threadData::mutex_};
+  threadData::notifyMainCtrlC_ = true;
+  threadData::cvMain_.notify_all();
+}
 }
