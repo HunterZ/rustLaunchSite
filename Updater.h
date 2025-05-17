@@ -130,8 +130,6 @@ private:
   std::filesystem::path appManifestPath_;
   // path to SteamCMD binary as reported by manifest file
   std::filesystem::path steamCmdPath_;
-  // directory in which modding framework downloads should be temporarily stored
-  std::filesystem::path downloadPath_;
   // path to Carbon/Oxide modding framework DLL derived from server install path
   // may be empty if not installed, and/or modding framework updating disabled
   std::filesystem::path frameworkDllPath_;

@@ -354,7 +354,6 @@ Updater::Updater(
   , serverInstallPath_(cfgSptr->GetInstallPath())
   , appManifestPath_(cfgSptr->GetInstallPath() / "steamapps/appmanifest_258550.acf")
   , steamCmdPath_(cfgSptr->GetSteamcmdPath())
-  , downloadPath_(cfgSptr->GetPathsDownload())
   , frameworkDllPath_(GetFrameworkDllPath(
       serverInstallPath_, cfgSptr->GetUpdateModFrameworkType()))
 {
@@ -405,23 +404,7 @@ Updater::Updater(
     !frameworkDllPath_.empty() && !std::filesystem::exists(frameworkDllPath_))
   {
     std::cout << "WARNING: Modding framework DLL '" << frameworkDllPath_ << "' not found; automatic " << ToString(cfgSptr->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " updates disabled\n";
-    downloadPath_.clear();
     frameworkDllPath_.clear();
-  }
-  if (!frameworkDllPath_.empty())
-  {
-    if (!IsDirectory(downloadPath_))
-    {
-      std::cout << "WARNING: Configured download path " << downloadPath_ << " is not a directory; automatic " << ToString(cfgSptr->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " updates disabled\n";
-      downloadPath_.clear();
-      frameworkDllPath_.clear();
-    }
-    else if (!IsWritable(downloadPath_))
-    {
-      std::cout << "WARNING: Configured download path " << downloadPath_ << " is not writable; automatic " << ToString(cfgSptr->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " updates disabled\n";
-      downloadPath_.clear();
-      frameworkDllPath_.clear();
-    }
   }
 
   // std::cout << "Updater initialized. Server updates " << (serverUpdateCheck_ ? "enabled" : "disabled") << ". Oxide updates " << (oxideUpdateCheck_ ? "enabled" : "disabled")<< "\n";
@@ -482,9 +465,9 @@ void Updater::UpdateFramework(const bool suppressWarning) const
   }
 
   // abort if any required path is empty, meaning it failed validation
-  if (downloadPath_.empty() || serverInstallPath_.empty())
+  if (serverInstallPath_.empty())
   {
-    std::cout << "ERROR: Cannot update " << frameworkTitle << " because download and/or server install path is invalid\n";
+    std::cout << "ERROR: Cannot update " << frameworkTitle << " because server install path is invalid\n";
     return;
   }
 
