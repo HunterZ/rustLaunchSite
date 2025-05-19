@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -249,6 +250,59 @@ void UpdateServer(
   }
   std::cout << "rustLaunchSite: Completed server update loop" << std::endl;
 }
+
+// get shutdown reason from text file if one exists
+std::string GetShutdownReason(
+  std::filesystem::path reasonPath, std::string_view fallbackReason = {})
+{
+  if (!std::filesystem::exists(reasonPath))
+  {
+    std::cout << "rustLaunchSite: No reason file at reasonPath=" << reasonPath << std::endl;
+    return std::string{fallbackReason};
+  }
+
+  std::string retVal{};
+  std::ifstream reasonStream{reasonPath};
+  if (reasonStream)
+  {
+    // read the file
+    // this is done line-by-line to normalize EOL characters
+    std::string line{};
+    std::size_t lineCount{0};
+    std::size_t nonEmptyLineCount{0};
+    while (std::getline(reasonStream, line))
+    {
+      ++lineCount;
+      if (!line.empty()) ++nonEmptyLineCount;
+      if (!retVal.empty()) retVal.append("\n");
+      retVal.append(line);
+    }
+    std::cout << "rustLaunchSite: Read " << lineCount << " line(s) from reasonPath=" << reasonPath << std::endl;
+    // if more than one nonempty line read, ensure reason starts with a newline
+    if (nonEmptyLineCount > 1 && !retVal.empty() && retVal.at(0) != '\n')
+    {
+      retVal.insert(0, "\n");
+    }
+  }
+  else
+  {
+    std::cout << "rustLaunchSite: Failed to open reason file at reasonPath=" << reasonPath << std::endl;
+    // don't return, because we still want to try to remove the file
+    retVal = fallbackReason;
+  }
+
+  reasonStream.close();
+  if (std::filesystem::remove(reasonPath))
+  {
+    std::cout << "rustLaunchSite: Deleted reason file at reasonPath=" << reasonPath << std::endl;
+  }
+  else
+  {
+    std::cout << "rustLaunchSite: Failed to delete reason file at reasonPath=" << reasonPath << std::endl;
+  }
+
+  return retVal;
+}
 }
 
 int main(int argc, char* argv[])
@@ -361,7 +415,8 @@ int main(int argc, char* argv[])
         // attempt an orderly shutdown
         std::cout << "rustLaunchSite: Ctrl+C signal caught; stopping server" << std::endl;
         ::SetTimerState(TimerState::STOP);
-        serverUptr->Stop("Server manager terminated");
+        serverUptr->Stop(GetShutdownReason(
+          configSptr->GetProcessReasonPath(), "Server manager terminated"));
         // as Ctrl+C is the only orderly shutdown stimulus, we want to report a
         //  successful exit
         retVal = RLS_EXIT::SUCCESS;
@@ -385,10 +440,25 @@ int main(int argc, char* argv[])
           // pause timer thread
           // ...although this probably doesn't matter, since we hold the mutex
           ::SetTimerState(TimerState::PAUSE);
+          // derive a reason string
+          std::string updateReason{};
+          if (updateServerOnInterval)
+          {
+            updateReason.append("Facepunch");
+          }
+          if (updateModFrameworkOnInterval)
+          {
+            if (!updateReason.empty())
+            {
+              updateReason.append(" + ");
+            }
+            updateReason.append(rustLaunchSite::Config::ToString(
+              configSptr->GetUpdateModFrameworkType()));
+          }
           // stop server
-          std::cout << "rustLaunchSite: Update(s) required; stopping server" << std::endl;
+          std::cout << "rustLaunchSite: Update(s) required: " << updateReason << "; stopping server" << std::endl;
           // install updates
-          serverUptr->Stop("Installing updates");
+          serverUptr->Stop("Installing update(s): " + updateReason);
           if (updateServerOnInterval)
           {
             UpdateServer(
@@ -495,7 +565,8 @@ int main(int argc, char* argv[])
     ::SetTimerState(TimerState::STOP);
     timerThreadUptr->join();
     std::cout << "rustLaunchSite: Stopping server (if running)" << std::endl;
-    serverUptr->Stop("Server manager shutting down");
+    serverUptr->Stop(GetShutdownReason(
+      configSptr->GetProcessReasonPath(), "Server manager shutting down"));
   }
   catch (const std::exception& e)
   {

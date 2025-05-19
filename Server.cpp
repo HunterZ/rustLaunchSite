@@ -218,7 +218,7 @@ Server::~Server()
   {
     try
     {
-      Stop("Unexpected server manager failure");
+      Stop();
     }
     catch (const std::exception& e)
     {

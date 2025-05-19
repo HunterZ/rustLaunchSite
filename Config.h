@@ -19,6 +19,16 @@ class Config
 public:
 
   enum class ModFrameworkType { NONE, CARBON, OXIDE };
+  static std::string ToString(const ModFrameworkType type)
+  {
+    switch (type)
+    {
+      case ModFrameworkType::NONE:   return "None";
+      case ModFrameworkType::CARBON: return "Carbon";
+      case ModFrameworkType::OXIDE:  return "Oxide";
+    }
+    return "Unknown";
+  }
 
   enum class SeedStrategy { FIXED, LIST, RANDOM };
 
@@ -84,12 +94,10 @@ public:
     { return installPath_; }
   std::string           GetInstallIdentity()                     const
     { return installIdentity_; }
-  std::filesystem::path GetPathsCache()                          const
-    { return pathsCache_; }
-  std::filesystem::path GetPathsDownload()                       const
-    { return pathsDownload_; }
   bool                  GetProcessAutoRestart()                  const
     { return processAutoRestart_; }
+  std::filesystem::path GetProcessReasonPath()                   const
+    { return processReasonPath_; }
   int                   GetProcessShutdownDelaySeconds()         const
     { return processShutdownDelaySeconds_; }
   std::string           GetRconPassword()                        const
@@ -149,9 +157,8 @@ private:
 
   std::filesystem::path installPath_ = {};
   std::string           installIdentity_ = {};
-  std::filesystem::path pathsCache_ = {};
-  std::filesystem::path pathsDownload_ = {};
   bool                  processAutoRestart_ = {};
+  std::filesystem::path processReasonPath_ = {};
   int                   processShutdownDelaySeconds_ = {};
   std::string           rconPassword_ = {};
   std::string           rconIP_ = {};
