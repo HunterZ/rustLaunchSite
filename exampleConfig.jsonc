@@ -29,25 +29,6 @@
       //  - Used internally and passed to server as `+server.identity`.
       "identity": "server1"
     },
-    // Required group: rustLaunchSite path settings.
-    "paths":
-    {
-      // Required string: File that rustLaunchSite should use to cache data that
-      //  needs to persist across runs (e.g. last used seed settings, last seen
-      //  client-server protocol version, etc.).
-      // NOTES:
-      //  - rustLaunchSite must have the ability to read and write this file.
-      //  - rustLaunchSite will attempt to create this file as needed if it does
-      //     not exist.
-      "cache": "C:/Games/rustserver/rustLaunchSite/rlscache.cfg",
-      // Required string: Directory that rustLaunchSite should use for temporary
-      //  downloads (e.g. Carbon/Oxide releases).
-      // NOTES:
-      //  - Directory must exist, or errors / reduced functionality may occur.
-      //  - rustLaunchSite must have the ability to create and delete files in
-      //     this directory as needed.
-      "download": "C:/Games/rustserver/rustLaunchSite"
-    },
     // Optional group: Server process (re)start/shutdown settings; if omitted,
     //  the contained settings will be considered disabled.
     // NOTE: See `rustDedicated` section for sever command-line parameter
@@ -62,6 +43,17 @@
       // NOTE: This is equivalent to the `goto` feature commonly used in shell
       //  scripts to help keep a server running.
       "autoRestart": true,
+      // Optional string: Path to file containing a reason why a rustLaunchSite
+      //  termination is causing the server to shut down. This is intended to
+      //  facilitate things like daily restarts that can be implemented by
+      //  restarting rustLaunchSite on a schedule. If omitted, rustLaunchSite
+      //  will explain that the server shutdown is occurring due to its server
+      //  manager being stopped.
+      // NOTES:
+      //  - File will not be read until rustLaunchSite receives a shutdown
+      //     stimulus.
+      //  - File will be deleted on read, to avoid confusion.
+      "reasonPath": "C:\\Games\\rustLaunchSite\\reason.txt",
       // Optional integer: A positive value if rustLaunchSite-managed server
       //  shutdowns should be announced and delayed by up to the specified
       //  number of seconds when players are online, in order to give them a
@@ -357,7 +349,7 @@
       // true to suppress GUI.
       "batchmode": true,
       // path/name of server log file.
-      "logfile": "C:/Games/rustserver/log.txt",
+      "logfile": "C:\\Games\\rustserver\\log.txt",
       // don't initialize a graphics device (allows running without a GPU).
       "nographics": true,
       // true to suppress crash dialog.

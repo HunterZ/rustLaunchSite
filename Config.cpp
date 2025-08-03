@@ -163,18 +163,16 @@ Config::Config(std::filesystem::path configFile)
     installPath_.make_preferred();
     jRlsInstall.at("identity").get_to(installIdentity_);
 
-    // paths
-    const auto& jRlsPaths{jRls.at("paths")};
-    jRlsPaths.at("cache").get_to(pathsCache_);
-    pathsCache_.make_preferred();
-    jRlsPaths.at("download").get_to(pathsDownload_);
-    pathsDownload_.make_preferred();
-
     // process
     if (jRls.contains("process"))
     {
       const auto& jRlsProcess{jRls.at("process")};
       GetOptionalValueTo(processAutoRestart_, jRlsProcess, "autoRestart");
+      if (jRlsProcess.contains("reasonPath"))
+      {
+        jRlsProcess.at("reasonPath").get_to(processReasonPath_);
+        processReasonPath_.make_preferred();
+      }
       // default optional integer to zero
       GetOptionalValueTo(
         processShutdownDelaySeconds_, jRlsProcess, "shutdownDelaySeconds");

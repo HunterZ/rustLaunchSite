@@ -87,7 +87,7 @@ public:
   ///  Does nothing if the server is already stopped.
   /// @param reason Optional shutdown reason, provided to anyone monitoring
   ///  the server (online players, Discord integrations, etc.)
-  void Stop(const std::string& reason = {});
+  void Stop(const std::string& reason = "Unexpected server manager failure");
 
 private:
 
