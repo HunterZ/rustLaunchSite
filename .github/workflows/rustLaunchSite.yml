@@ -61,7 +61,7 @@ jobs:
         if: ${{ env.MSYSTEM == 'LINUX' }}
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: cmake ninja
+          packages: cmake # ninja
           version: 1.0
 
       - name: Setup MSVC environment
