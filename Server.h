@@ -9,7 +9,10 @@
 
 namespace rustLaunchSite
 {
+// forward declaraions
+
 class  Config;
+class  Logger;
 class  Rcon;
 struct ProcessImpl;
 
@@ -27,7 +30,7 @@ public:
   /// @throw @c std::invalid_argument if dedicated server binary or install
   ///  path are not found, or @c std::runtime_error if RCON facility
   ///  creation failed
-  explicit Server(std::shared_ptr<const Config> cfgSptr);
+  explicit Server(Logger& logger, std::shared_ptr<const Config> cfgSptr);
 
   /// @brief Destructor
   /// @details For some reason this needs to be explicitly declared in order
@@ -120,6 +123,8 @@ private:
   std::size_t stopDelaySeconds_;
   // path that should be used as working directory when launching server
   std::filesystem::path workingDirectory_;
+  // logger
+  Logger& logger_;
 };
 }
 

@@ -1,7 +1,7 @@
 #include "Rcon.h"
 
+#include "Logger.h"
 #include <chrono>
-#include <iostream>
 #include <ixwebsocket/IXNetSystem.h>
 #include <ixwebsocket/IXWebSocket.h>
 #include <nlohmann/json.hpp>
@@ -89,11 +89,16 @@ std::mutex Rcon::rconInitHandleMutex_ = {};
 // public member methods
 
 Rcon::Rcon(
-  const std::string& hostOrIp, const int port, const std::string& password,
-  const bool logMessages
+  Logger& logger
+, const std::string& hostOrIp
+, const int port
+, const std::string& password
+, const bool logMessages
 )
-  : logMessages_(logMessages)
-  , webSocketUptr_(std::make_unique<WebSocket>())
+  : logMessages_{logMessages}
+  , rconInitHandleSptr_{GetInitHandle(logger)}
+  , webSocketUptr_{std::make_unique<WebSocket>()}
+  , logger_{logger}
 {
   auto& webSocket(**webSocketUptr_);
   // Rust doesn't support secure WebSocket connections, so form insecure URL
@@ -116,7 +121,7 @@ Rcon::Rcon(
   );
 
   webSocket.start();
-  std::cout << "Started WebSocket RCON connection to server: " << hostOrIp << std::endl;
+  LOG_INFO(logger_, "Started WebSocket RCON connection to server: " << hostOrIp);
 }
 
 Rcon::~Rcon()
@@ -145,7 +150,7 @@ std::string Rcon::SendCommand(
 {
   if (!IsConnected())
   {
-    std::cout << "Ignoring RCON command due to no connection" << std::endl;
+    LOG_INFO(logger_, "Ignoring RCON command due to no connection");
     return {};
   }
 
@@ -169,12 +174,12 @@ std::string Rcon::SendCommand(
   // record pending request if we have an ID
   if (identifier)
   {
-    // std::cout << "Queued request for RCON response to command ID=" << identifier << std::endl;
+    // LOG_INFO(logger_, "Queued request for RCON response to command ID=" << identifier);
     requests_.insert(identifier);
   }
   // else
   // {
-  //   std::cout << "Not requesting response for RCON comamnd ID=" << identifier << std::endl;
+  //   LOG_INFO(logger_, "Not requesting response for RCON comamnd ID=" << identifier);
   // }
 
   const auto& result((*webSocketUptr_)->send(j.dump()));
@@ -186,7 +191,7 @@ std::string Rcon::SendCommand(
   //   << ", payloadSize=" << result.payloadSize
   //   << ", success=" << result.success
   //   << ", wireSize=" << result.wireSize
-  //   << std::endl;
+  //  );
 
   // TODO: any special failure handling needed?
 
@@ -194,7 +199,7 @@ std::string Rcon::SendCommand(
   //  out here if no timeout specified
   if (!timeoutMilliseconds)
   {
-    // std::cout << "*** skipping RCON response wait" << std::endl;
+    // LOG_INFO(logger_, "*** skipping RCON response wait");
     return {};
   }
 
@@ -205,7 +210,7 @@ std::string Rcon::SendCommand(
       std::chrono::steady_clock::now() +
       std::chrono::milliseconds(timeoutMilliseconds)
     );
-    // std::cout << "*** waiting on RCON response for " << timeoutMilliseconds << " ms, until time: " << timeout.time_since_epoch().count() << std::endl;
+    // LOG_INFO(logger_, "*** waiting on RCON response for " << timeoutMilliseconds << " ms, until time: " << timeout.time_since_epoch().count());
     // wait until condition variable notified (potential response received
     //  while waiting), timeout elapsed (no response), or stop condition
     //  encountered (response receipt confirmed)
@@ -220,18 +225,18 @@ std::string Rcon::SendCommand(
         return (responses_.find(identifier) != responses_.end());
       }
     );
-    // std::cout << "*** success=" << success << std::endl;
+    // LOG_INFO(logger_, "*** success=" << success);
   }
 
   // remove pending request ID, as the transaction is considered complete at
   //  this point, regardless of outcome
   requests_.erase(identifier);
-  // std::cout << "SendCommand(): Removed pending request ID=" << identifier << std::endl;
+  // LOG_INFO(logger_, "SendCommand(): Removed pending request ID=" << identifier);
 
   const auto responseIter(responses_.find(identifier));
   if (responseIter == responses_.end())
   {
-    std::cout << "WARNING: Response wait timed out for RCON command (id=" << identifier << "): " << command << std::endl;
+    LOG_WARNING(logger_, "Response wait timed out for RCON command (id=" << identifier << "): " << command);
     return {};
   }
 
@@ -248,7 +253,7 @@ std::string Rcon::SendCommand(
 // if weak pointer is valid, then there is an Rcon instance holding a shared
 //  pointer to an active init handle and we can just return a copy of that;
 //  otherwise create a new one, capture it in the weak pointer, and return it
-std::shared_ptr<RconInitHandle> Rcon::GetInitHandle()
+std::shared_ptr<RconInitHandle> Rcon::GetInitHandle(Logger& logger)
 {
   // lock mutex to prevent concurrent creation of multiple handles
   std::scoped_lock lock(rconInitHandleMutex_);
@@ -268,16 +273,16 @@ std::shared_ptr<RconInitHandle> Rcon::GetInitHandle()
       //  deleter)
       &RCON_INIT_HANDLE,
       // custom deleter lambda
-      [](RconInitHandle const* handlePtr)
+      [&logger](RconInitHandle const* handlePtr)
       {
         ix::uninitNetSystem();
-        std::cout << "Uninitialized WebSocket library (destroyed handle #" << handlePtr->count_ << ")" << std::endl;
+        LOG_INFO(logger, "Deinitialized WebSocket library (destroyed handle #" << handlePtr->count_ << ")");
       }
     );
 
     // perform the actual init
     ix::initNetSystem();
-    std::cout << "Initialized WebSocket library (created handle #" << RCON_INIT_HANDLE.count_ << ")" << std::endl;
+    LOG_INFO(logger, "Initialized WebSocket library (created handle #" << RCON_INIT_HANDLE.count_ << ")");
   }
   // return new or existing handle
   return handleSptr;
@@ -287,12 +292,12 @@ void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
 {
   std::scoped_lock lock(mutex_);
 
-  // std::cout << "Processing WebSocket event; pending request IDs: {";
+  // LOG_INFO(logger_, "Processing WebSocket event; pending request IDs: {";
   // for (const auto i : requests_)
   // {
-  //   std::cout << " " << i;
+  //   LOG_INFO(logger_, " " << i;
   // }
-  // std::cout << " }" << std::endl;
+  // LOG_INFO(logger_, " }");
 
   const auto& msg(*message);
   switch (msg.type)
@@ -301,7 +306,7 @@ void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
     {
       if (logMessages_)
       {
-        std::cout << "Processing received RCON message: " << msg.str << std::endl;
+        LOG_INFO(logger_, "Processing received RCON message: " << msg.str);
       }
       const nlohmann::json j(nlohmann::json::parse(msg.str));
       // first thing to do is look for an expected response
@@ -314,7 +319,7 @@ void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
       };
       if (!j.contains("Identifier"))
       {
-        std::cout << "WARNING: Received WebSocket message with no RCON ID: " << msg.str << std::endl;
+        LOG_WARNING(logger_, "Received WebSocket message with no RCON ID: " << msg.str);
         return;
       }
       if (const auto id(j["Identifier"].get<REQUEST_ID_TYPE>()); id && !isChat)
@@ -323,7 +328,7 @@ void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
         {
           // we can now log this, because we use id=0 when not expecting a
           //  response
-          std::cout << "WARNING: Ignoring RCON response with unknown ID=" << id << ": " << msg.str << std::endl;
+          LOG_WARNING(logger_, "Ignoring RCON response with unknown ID=" << id << ": " << msg.str);
           return;
         }
         // start with an empty string in case message string is missing
@@ -336,7 +341,7 @@ void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
         // clear pending request in case a second response comes in with
         //  the same ID (*cough cough Oxide*)
         requests_.erase(id);
-        // std::cout << "WebsocketMessageHandler(): Removed pending request ID=" << id << std::endl;
+        // LOG_INFO(logger_, "WebsocketMessageHandler(): Removed pending request ID=" << id);
         // wake up all waiting senders; they will each check the response
         //  map for their respective ID to see if the response is theirs
         cv_.notify_all();
@@ -352,22 +357,19 @@ void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
     break;
     case ix::WebSocketMessageType::Open:
     {
-      std::cout << "WebSocket connection established" << std::endl;
+      LOG_INFO(logger_, "WebSocket connection established");
       return;
     }
     break;
     case ix::WebSocketMessageType::Close:
     {
-      std::cout << "WebSocket connection terminated: " << msg.closeInfo.reason << std::endl;
+      LOG_INFO(logger_, "WebSocket connection terminated: " << msg.closeInfo.reason);
       return;
     }
     break;
     case ix::WebSocketMessageType::Error:
     {
-      std::cout
-        << "WebSocket error (ReadyState="
-        << (webSocketUptr_ ? static_cast<int>((*webSocketUptr_)->getReadyState()) : -1)
-        << "): " << msg.errorInfo.reason << std::endl;
+      LOG_WARNING(logger_, "WebSocket error (ReadyState=" << (webSocketUptr_ ? static_cast<int>((*webSocketUptr_)->getReadyState()) : -1) << "): " << msg.errorInfo.reason);
       // TODO: does connected_ need to be set to false, or is this only fired
       //  when trying to (re)connect?
       return;
@@ -375,23 +377,23 @@ void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
     break;
     case ix::WebSocketMessageType::Ping:
     {
-      std::cout << "WebSocket PING" << std::endl;
+      LOG_INFO(logger_, "WebSocket PING");
       return;
     }
     break;
     case ix::WebSocketMessageType::Pong:
     {
-      std::cout << "WebSocket PONG" << std::endl;
+      LOG_INFO(logger_, "WebSocket PONG");
       return;
     }
     break;
     case ix::WebSocketMessageType::Fragment:
     {
-      std::cout << "Received WebSocket fragment" << std::endl;
+      LOG_INFO(logger_, "Received WebSocket fragment");
       return;
     }
     break;
   }
-  std::cout << "WARNING: Unknown WebSocket message type: " << static_cast<int>(msg.type) << std::endl;
+  LOG_WARNING(logger_, "Unknown WebSocket message type: " << static_cast<int>(msg.type));
 }
 }

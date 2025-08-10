@@ -1,5 +1,6 @@
 #include "Config.h"
 #include "Downloader.h"
+#include "Logger.h"
 #include "MainCommon.h"
 #include "Server.h"
 #include "Updater.h"
@@ -32,8 +33,8 @@ namespace threadData
   std::condition_variable cvTimer_;
   // timer thread state commanded by main()
   TimerState timerState_{TimerState::RUN};
-  // whether Ctrl+C handler is notifying main() to shut down
-  bool notifyMainCtrlC_{false};
+  // whether Stop() handler is notifying main() to shut down
+  bool notifyMainStop_{false};
   // whether timer thread is notifying main() to check server health
   bool notifyMainServer_{false};
   // whether timer thread is notifying main() to check for updates
@@ -140,7 +141,8 @@ void SetTimerState(const TimerState ts)
 // return pair indicating whether server and/or mod framework needs updating,
 //  respectively
 std::pair<bool, bool> UpdateCheck(
-  const rustLaunchSite::Updater& updater
+  rustLaunchSite::Logger& logger
+, const rustLaunchSite::Updater& updater
 , const bool checkServer
 , const bool checkModFramework
 , const bool updateModFrameworkOnServer)
@@ -148,13 +150,13 @@ std::pair<bool, bool> UpdateCheck(
   std::pair<bool, bool> retVal{false, false};
   if (checkServer)
   {
-    std::cout << "rustLaunchSite: Performing server update check" << std::endl;
+    LOG_INFO(logger, "Performing server update check");
     retVal.first = updater.CheckServer();
   }
   const bool forceCheck{updateModFrameworkOnServer && retVal.first};
   if (checkModFramework || forceCheck)
   {
-    std::cout << "rustLaunchSite: Performing mod framework update check" << std::endl;
+    LOG_INFO(logger, "Performing mod framework update check");
     retVal.second = updater.CheckFramework();
   }
   return retVal;
@@ -162,24 +164,25 @@ std::pair<bool, bool> UpdateCheck(
 
 // wrapper around Updater::UpdateFramework() to loop until update succeeds
 void UpdateFramework(
+  rustLaunchSite::Logger& logger,
   const rustLaunchSite::Updater& updater,
   const int retryDelaySeconds = 0, const bool suppressWarning = false)
 {
-  std::cout << "rustLaunchSite: Entering plugin framework update loop" << std::endl;
+  LOG_INFO(logger, "Entering plugin framework update loop");
   bool firstTry{true};
   for(bool update{true}; update; update = updater.CheckFramework())
   {
     if (!firstTry)
     {
-      std::cout << "rustLaunchSite: WARNING: Detected plugin framework version mismatch after update attempt; ";
+      LOG_WARNING(logger, "Detected plugin framework version mismatch after update attempt...");
       if (retryDelaySeconds > 0)
       {
-        std::cout << "waiting for " << retryDelaySeconds << " second(s) and then trying again..." << std::endl;
+        LOG_WARNING(logger, "\t...waiting for " << retryDelaySeconds << " second(s) before trying again");
         std::this_thread::sleep_for(std::chrono::seconds(retryDelaySeconds));
       }
       else
       {
-        std::cout << "trying again..." << std::endl;
+        LOG_WARNING(logger, "\t...trying again immediately");
       }
     }
 
@@ -187,29 +190,30 @@ void UpdateFramework(
 
     firstTry = false;
   }
-  std::cout << "rustLaunchSite: Completed plugin framework update loop" << std::endl;
+  LOG_INFO(logger, "Completed plugin framework update loop");
 }
 
 // wrapper around Updater::UpdateServer() to loop until update succeeds
 void UpdateServer(
+  rustLaunchSite::Logger& logger,
   const rustLaunchSite::Updater& updater,
   const int retryDelaySeconds = 0)
 {
-  std::cout << "rustLaunchSite: Entering server update loop" << std::endl;
+  LOG_INFO(logger, "Entering server update loop");
   bool firstTry{true};
   for(bool update{true}; update; update = updater.CheckServer())
   {
     if (!firstTry)
     {
-      std::cout << "rustLaunchSite: WARNING: Detected server version mismatch after update attempt; " << std::endl;
+      LOG_WARNING(logger, "Detected server version mismatch after update attempt...");
       if (retryDelaySeconds > 0)
       {
-        std::cout << "waiting for " << retryDelaySeconds << " second(s) and then trying again..." << std::endl;
+        LOG_WARNING(logger, "\t...waiting for " << retryDelaySeconds << " second(s) before trying again");
         std::this_thread::sleep_for(std::chrono::seconds(retryDelaySeconds));
       }
       else
       {
-        std::cout << "trying again..." << std::endl;
+        LOG_WARNING(logger, "\t...trying again immediately");
       }
     }
 
@@ -217,16 +221,18 @@ void UpdateServer(
 
     firstTry = false;
   }
-  std::cout << "rustLaunchSite: Completed server update loop" << std::endl;
+  LOG_INFO(logger, "Completed server update loop");
 }
 
 // get shutdown reason from text file if one exists
 std::string GetShutdownReason(
-  std::filesystem::path reasonPath, std::string_view fallbackReason = {})
+  rustLaunchSite::Logger& logger
+, std::filesystem::path reasonPath
+, std::string_view fallbackReason = {})
 {
   if (!std::filesystem::exists(reasonPath))
   {
-    std::cout << "rustLaunchSite: No reason file at reasonPath=" << reasonPath << std::endl;
+    LOG_INFO(logger, "No reason file at reasonPath=" << reasonPath);
     return std::string{fallbackReason};
   }
 
@@ -246,7 +252,7 @@ std::string GetShutdownReason(
       if (!retVal.empty()) retVal.append("\n");
       retVal.append(line);
     }
-    std::cout << "rustLaunchSite: Read " << lineCount << " line(s) from reasonPath=" << reasonPath << std::endl;
+    LOG_INFO(logger, "Read " << lineCount << " line(s) from reasonPath=" << reasonPath);
     // if more than one nonempty line read, ensure reason starts with a newline
     if (nonEmptyLineCount > 1 && !retVal.empty() && retVal.at(0) != '\n')
     {
@@ -255,7 +261,7 @@ std::string GetShutdownReason(
   }
   else
   {
-    std::cout << "rustLaunchSite: Failed to open reason file at reasonPath=" << reasonPath << std::endl;
+    LOG_WARNING(logger, "Failed to open reason file at reasonPath=" << reasonPath);
     // don't return, because we still want to try to remove the file
     retVal = fallbackReason;
   }
@@ -263,11 +269,11 @@ std::string GetShutdownReason(
   reasonStream.close();
   if (std::filesystem::remove(reasonPath))
   {
-    std::cout << "rustLaunchSite: Deleted reason file at reasonPath=" << reasonPath << std::endl;
+    LOG_INFO(logger, "Deleted reason file at reasonPath=" << reasonPath);
   }
   else
   {
-    std::cout << "rustLaunchSite: Failed to delete reason file at reasonPath=" << reasonPath << std::endl;
+    LOG_WARNING(logger, "Failed to delete reason file at reasonPath=" << reasonPath);
   }
 
   return retVal;
@@ -276,14 +282,14 @@ std::string GetShutdownReason(
 
 namespace rustLaunchSite
 {
-int Start(int argc, char* argv[])
+int Start(Logger& logger, int argc, char* argv[])
 {
-  std::cout << "rustLaunchSite: Starting" << std::endl;
+  LOG_INFO(logger, "Starting");
 
   if (argc <= 1)
   {
-    std::cout << "rustLaunchSite: ERROR: Configuration file/path must be specified as an argument" << std::endl;
-    return RLS_EXIT::ARG;
+    LOG_ERROR(logger, "Configuration file/path must be specified as an argument");
+    return RLS_EXIT_ARG;
   }
 
   // create null pointers for all facilities we'll be instantiating, so that we
@@ -293,22 +299,25 @@ int Start(int argc, char* argv[])
   std::unique_ptr<rustLaunchSite::Updater> updaterUptr;
   std::unique_ptr<std::thread> timerThreadUptr;
 
-  RLS_EXIT retVal(RLS_EXIT::SUCCESS);
+  int retVal(RLS_EXIT_SUCCESS);
   try
   {
     // load config file
-    configSptr = std::make_shared<rustLaunchSite::Config>(argv[1]);
+    configSptr = std::make_shared<rustLaunchSite::Config>(logger, argv[1]);
     // instantiate server manager
-    serverUptr = std::make_unique<rustLaunchSite::Server>(configSptr);
+    serverUptr = std::make_unique<rustLaunchSite::Server>(logger, configSptr);
     // instantiate update manager
     updaterUptr = std::make_unique<rustLaunchSite::Updater>(
-      configSptr, std::make_shared<rustLaunchSite::Downloader>()
+      logger
+    , configSptr
+    , std::make_shared<rustLaunchSite::Downloader>(logger)
     );
 
     {
       const auto [updateServerOnStartup, updateModFrameworkOnStartup] =
         UpdateCheck(
-          *updaterUptr
+          logger
+        , *updaterUptr
         , configSptr->GetUpdateServerOnStartup()
         , configSptr->GetUpdateModFrameworkOnStartup()
         , configSptr->GetUpdateModFrameworkOnServerUpdate())
@@ -316,72 +325,78 @@ int Start(int argc, char* argv[])
       if (updateServerOnStartup)
       {
         UpdateServer(
-          *updaterUptr, configSptr->GetUpdateServerRetryDelaySeconds());
+          logger
+        , *updaterUptr
+        , configSptr->GetUpdateServerRetryDelaySeconds());
       }
       if (updateModFrameworkOnStartup)
       {
         UpdateFramework(
-          *updaterUptr
+          logger
+        , *updaterUptr
         , configSptr->GetUpdateModFrameworkRetryDelaySeconds()
         , updateServerOnStartup);
       }
     }
 
     // launch server
-    std::cout << "rustLaunchSite: Starting server" << std::endl;
+    LOG_INFO(logger, "Starting server");
     if (!serverUptr->Start())
     {
-      std::cout << "rustLaunchSite: Server failed to start; shutting down" << std::endl;
+      LOG_ERROR(logger, "Server failed to start");
       // okay to just abort at this point
-      return RLS_EXIT::START;
+      return RLS_EXIT_START;
     }
 
     // start timer thread
-    std::cout << "rustLaunchSite: Starting timer thread" << std::endl;
+    LOG_INFO(logger, "Starting timer thread");
     timerThreadUptr = std::make_unique<std::thread>(
       &TimerFunction, 1, configSptr->GetUpdateIntervalMinutes()
     );
     if (!timerThreadUptr)
     {
-      throw std::runtime_error("rustLaunchSite: Failed to instantiate timer thread");
+      LOG_ERROR(logger, "Failed to instantiate timer thread");
+      return RLS_EXIT_THREAD;
     }
 
     // main loop
     // bool gotProtocol(false);
-    std::cout << "rustLaunchSite: Starting main event loop" << std::endl;
+    LOG_INFO(logger, "Starting main event loop");
     while (true)
     {
       // grab mutex for safe state variable access in loop when awake
       std::unique_lock lock(threadData::mutex_);
       // sleep until we get a notification from the timer thread
-      // std::cout << "rustLaunchSite: Waiting for events" << std::endl;
+      // LOG_INFO(logger, "Waiting for events");
       threadData::cvMain_.wait
       (
         lock,
         [](){
           return (
-            threadData::notifyMainCtrlC_ ||
+            threadData::notifyMainStop_ ||
             threadData::notifyMainServer_ ||
             threadData::notifyMainUpdater_
           );
         }
       );
-      // std::cout << "rustLauchSite: Woke up with state:"
-      //   << " CtrlC=" << threadData::notifyMainCtrlC_
+      // LOG_INFO(logger, "rustLauchSite: Woke up with state:"
+      //   << " Stop=" << threadData::notifyMainStop_
       //   << ", Server=" << threadData::notifyMainServer_
       //   << ", Updater=" << threadData::notifyMainUpdater_
-      //   << std::endl;
-      // handle Ctrl+C notification
-      if (threadData::notifyMainCtrlC_)
+      //  );
+      // handle Stop() notification
+      if (threadData::notifyMainStop_)
       {
         // attempt an orderly shutdown
-        std::cout << "rustLaunchSite: Ctrl+C signal caught; stopping server" << std::endl;
+        LOG_INFO(logger, "Server manager stop requested; stopping server");
         ::SetTimerState(TimerState::STOP);
         serverUptr->Stop(GetShutdownReason(
-          configSptr->GetProcessReasonPath(), "Server manager terminated"));
-        // as Ctrl+C is the only orderly shutdown stimulus, we want to report a
+          logger
+        , configSptr->GetProcessReasonPath()
+        , "Server manager stopped"));
+        // as Stop() is the only orderly shutdown stimulus, we want to report a
         //  successful exit
-        retVal = RLS_EXIT::SUCCESS;
+        retVal = RLS_EXIT_SUCCESS;
         break;
       }
       // handle update check timer notification
@@ -391,7 +406,8 @@ int Start(int argc, char* argv[])
         // check for updates
         const auto [updateServerOnInterval, updateModFrameworkOnInterval] =
           UpdateCheck(
-            *updaterUptr
+            logger
+          , *updaterUptr
           , configSptr->GetUpdateServerOnInterval()
           , configSptr->GetUpdateModFrameworkOnInterval()
           , configSptr->GetUpdateModFrameworkOnServerUpdate())
@@ -418,26 +434,28 @@ int Start(int argc, char* argv[])
               configSptr->GetUpdateModFrameworkType()));
           }
           // stop server
-          std::cout << "rustLaunchSite: Update(s) required: " << updateReason << "; stopping server" << std::endl;
+          LOG_INFO(logger, "Update(s) required: " << updateReason << "; stopping server");
           // install updates
           serverUptr->Stop("Installing update(s): " + updateReason);
           if (updateServerOnInterval)
           {
             UpdateServer(
-              *updaterUptr, configSptr->GetUpdateServerRetryDelaySeconds());
+              logger
+            , *updaterUptr, configSptr->GetUpdateServerRetryDelaySeconds());
           }
           if (updateModFrameworkOnInterval)
           {
             UpdateFramework(
-              *updaterUptr
+              logger
+            , *updaterUptr
             , configSptr->GetUpdateModFrameworkRetryDelaySeconds()
             , updateServerOnInterval);
           }
-          std::cout << "rustLaunchSite: Update(s) complete; starting server" << std::endl;
+          LOG_INFO(logger, "Update(s) complete; starting server");
           if (!serverUptr->Start())
           {
-            std::cout << "rustLaunchSite: Server failed to start; shutting down" << std::endl;
-            retVal = RLS_EXIT::UPDATE;
+            LOG_ERROR(logger, "Server failed to start");
+            retVal = RLS_EXIT_UPDATE;
             break;
           }
           // resume timer thread
@@ -463,11 +481,7 @@ int Start(int argc, char* argv[])
           )
           {
             // gotProtocol = true;
-            std::cout
-              << "rustLaunchSite: Got server info via RCON:"
-              << "\n\tplayers=" << serverInfo.players_
-              << "\n\tprotocol=" << serverInfo.protocol_
-              << std::endl;
+            LOG_INFO(logger, "rustLaunchSite: Got server info via RCON: players=" << serverInfo.players_ << ", protocol=" << serverInfo.protocol_);
     // TODO: poll server for protocol version via RCON, triggering wipe
     //  processing if a change is detected since last run
             // }
@@ -479,11 +493,12 @@ int Start(int argc, char* argv[])
           // configured to automatically restart
           // pause timers during server restart
           ::SetTimerState(TimerState::PAUSE);
-          std::cout << "rustLaunchSite: Server stopped unexpectedly" << std::endl;
+          LOG_INFO(logger, "Server stopped unexpectedly");
           // check for updates while the server is down
           const auto [updateServerOnRelaunch, updateModFrameworkOnRelaunch] =
             UpdateCheck(
-              *updaterUptr
+              logger
+            , *updaterUptr
             , configSptr->GetUpdateServerOnRelaunch()
             , configSptr->GetUpdateModFrameworkOnRelaunch()
             , configSptr->GetUpdateModFrameworkOnServerUpdate())
@@ -491,21 +506,24 @@ int Start(int argc, char* argv[])
           if (updateServerOnRelaunch)
           {
             UpdateServer(
-              *updaterUptr, configSptr->GetUpdateServerRetryDelaySeconds());
+              logger
+            , *updaterUptr
+            , configSptr->GetUpdateServerRetryDelaySeconds());
           }
           if (updateModFrameworkOnRelaunch)
           {
             UpdateFramework(
-              *updaterUptr
+              logger
+            , *updaterUptr
             , configSptr->GetUpdateModFrameworkRetryDelaySeconds()
             , updateServerOnRelaunch);
           }
           // relaunch server
-          std::cout << "rustLaunchSite: Relaunching server" << std::endl;
+          LOG_INFO(logger, "Relaunching server");
           if (!serverUptr->Start())
           {
-            std::cout << "rustLaunchSite: Server failed to relaunch; shutting down" << std::endl;
-            retVal = RLS_EXIT::RESTART;
+            LOG_ERROR(logger, "Server failed to relaunch");
+            retVal = RLS_EXIT_RESTART;
             break;
           }
           ::SetTimerState(TimerState::RUN);
@@ -514,31 +532,32 @@ int Start(int argc, char* argv[])
         {
           // configured to shutdown on unexpected server stop
           ::SetTimerState(TimerState::STOP);
-          std::cout << "rustLaunchSite: Server stopped unexpectedly; shutting down" << std::endl;
-          retVal = RLS_EXIT::RESTART;
+          LOG_ERROR(logger, "Server stopped unexpectedly");
+          retVal = RLS_EXIT_RESTART;
           break;
         }
       }
       // end of main loop
     }
 
-    std::cout << "rustLaunchSite: Exited main loop; beginning shutdown process" << std::endl;
-    std::cout << "rustLaunchSite: Stopping timer thread" << std::endl;
+    LOG_INFO(logger, "Exited main loop; beginning shutdown process");
+    LOG_INFO(logger, "Stopping timer thread");
     ::SetTimerState(TimerState::STOP);
     timerThreadUptr->join();
-    std::cout << "rustLaunchSite: Stopping server (if running)" << std::endl;
+    LOG_INFO(logger, "Stopping server (if running)");
     serverUptr->Stop(GetShutdownReason(
-      configSptr->GetProcessReasonPath(), "Server manager shutting down"));
+      logger
+    , configSptr->GetProcessReasonPath(), "Server manager shutting down"));
   }
   catch (const std::exception& e)
   {
-    std::cout << "rustLaunchSite: ERROR: Unhandled exception: " << e.what() << std::endl;
-    retVal = RLS_EXIT::EXCEPTION;
+    LOG_ERROR(logger, "ERROR: Unhandled exception: " << e.what());
+    retVal = RLS_EXIT_EXCEPTION;
   }
   catch(...)
   {
-    std::cout << "rustLaunchSite: ERROR: Unknown exception" << std::endl;
-    retVal = RLS_EXIT::EXCEPTION;
+    LOG_ERROR(logger, "ERROR: Unknown exception");
+    retVal = RLS_EXIT_EXCEPTION;
   }
 
   // std::thread blows up the application if not joined before exit, so check
@@ -549,7 +568,7 @@ int Start(int argc, char* argv[])
     timerThreadUptr->join();
   }
 
-  std::cout << "rustLaunchSite: Exiting" << std::endl;
+  LOG_INFO(logger, "Exiting");
 
   return retVal;
 }
@@ -558,7 +577,7 @@ void Stop()
 {
   // attempt to signal main()
   std::unique_lock lock{threadData::mutex_};
-  threadData::notifyMainCtrlC_ = true;
+  threadData::notifyMainStop_ = true;
   threadData::cvMain_.notify_all();
 }
 }

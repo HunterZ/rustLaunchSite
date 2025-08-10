@@ -14,6 +14,8 @@
 namespace rustLaunchSite
 {
 // forward declarations
+
+class Logger;
 struct RconInitHandle;
 struct WebSocket;
 struct WebSocketMessage;
@@ -28,6 +30,7 @@ public:
 
   /// @brief Public constructor
   /// @details Attempts to establish connection immediately.
+  /// @param logger Logger instance
   /// @param hostOrIp Hostname or IP address of RCON server
   /// @param port Port of RCON server
   /// @param password Password for RCON authentication
@@ -36,10 +39,11 @@ public:
   /// @throw @c std::runtime_error if underlying websocket handle creation
   ///  fails
   explicit Rcon(
-    const std::string& hostOrIp,
-    const int port,
-    const std::string& password,
-    const bool logMessages
+    Logger& logger
+  , const std::string& hostOrIp
+  , const int port
+  , const std::string& password
+  , const bool logMessages
   );
 
   /// @brief Destructor
@@ -94,7 +98,7 @@ private:
   //  attempts to reinitialize while already in use. Consequently, each @c Rcon
   //  instance calls this on construction and holds onto the @c shared_ptr
   //  during its lifetime.
-  static std::shared_ptr<RconInitHandle> GetInitHandle();
+  static std::shared_ptr<RconInitHandle> GetInitHandle(Logger& logger);
 
   // websocket callback handler
   void WebsocketMessageHandler(const WebSocketMessage& message);
@@ -128,7 +132,7 @@ private:
   //  https://github.com/machinezone/IXWebSocket/issues/457
   mutable std::recursive_mutex mutex_;
   // instance-specific shared pointer to init handle
-  std::shared_ptr<RconInitHandle> rconInitHandleSptr_ = GetInitHandle();
+  std::shared_ptr<RconInitHandle> rconInitHandleSptr_;
   // maintainability alias for request ID type
   using REQUEST_ID_TYPE = int32_t;
   // outstanding RCON request identifiers
@@ -137,6 +141,8 @@ private:
   std::map<REQUEST_ID_TYPE, std::string> responses_;
   // websocket connection handle
   std::unique_ptr<WebSocket> webSocketUptr_;
+  // logger
+  Logger& logger_;
 };
 }
 

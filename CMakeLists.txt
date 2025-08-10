@@ -5,6 +5,10 @@ project(rustLaunchSite
   VERSION 0.0.1
 )
 
+# Sonar is too stupid to ignore missing .modmap files, and we don't need them
+#  in this project anyway, so tell CMake not to generate them
+set(CMAKE_CXX_SCAN_FOR_MODULES 0)
+
 set(RLS_STATIC ON CACHE BOOL "Use static linking")
 if(RLS_STATIC)
   message("RLS: Configuring for static linking")
@@ -51,7 +55,7 @@ FetchContent_Declare(SrvLib
 )
 FetchContent_MakeAvailable(ctrl-c SrvLib)
 
-set(RLS_COMPILE_FEATURES cxx_std_17)
+set(RLS_COMPILE_FEATURES cxx_std_20)
 if(MSVC)
   set(RLS_COMPILE_OPTIONS /W4 /WX)
 else()
@@ -65,6 +69,8 @@ add_library(${RLS_OBJECT_TARGET} OBJECT
   Config.h
   Downloader.cpp
   Downloader.h
+  Logger.cpp
+  Logger.h
   MainCommon.cpp
   MainCommon.h
   Rcon.cpp
@@ -104,12 +110,19 @@ add_custom_command(TARGET ${PROJECT_NAME}
 )
 
 # build a service binary
-set(RLS_SERVICE_TARGET "${PROJECT_NAME}Service")
+if(WIN32)
+  set(RLS_SERVICE_TARGET "${PROJECT_NAME}Svc")
+else()
+  set(RLS_SERVICE_TARGET "${PROJECT_NAME}d")
+endif()
 add_executable(${RLS_SERVICE_TARGET} MainService.cpp)
 target_compile_features(${RLS_SERVICE_TARGET} PUBLIC ${RLS_COMPILE_FEATURES})
 target_compile_options(${RLS_SERVICE_TARGET} PRIVATE ${RLS_COMPILE_OPTIONS})
 target_link_libraries(${RLS_SERVICE_TARGET} PRIVATE
   ${RLS_OBJECT_TARGET}
+  Boost::boost
+  Boost::filesystem
+  Boost::process
   srvlib
 )
 target_link_options(${RLS_SERVICE_TARGET} PRIVATE ${RLS_LINK_OPTS})
@@ -118,49 +131,6 @@ add_custom_command(TARGET ${RLS_SERVICE_TARGET}
   COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
     ARGS "--strip-all" "$<TARGET_FILE:${RLS_SERVICE_TARGET}>"
 )
-
-# clangd can't find compile_commands.json in presets mode, so create a link to
-#  it in the project root directory (this is a hard link so that it also works
-#  on Windows)
-# note that it may not exist soon enough, since it's generated during configure,
-#  so a touch action is used to create a temporary stand-in first if needed
-set(COMPILE_COMMANDS_PATH "${CMAKE_BINARY_DIR}/compile_commands.json")
-if(NOT EXISTS "${COMPILE_COMMANDS_PATH}")
-  file(TOUCH "${COMPILE_COMMANDS_PATH}")
-endif()
-file(CREATE_LINK
-  "${COMPILE_COMMANDS_PATH}"
-  "${CMAKE_SOURCE_DIR}/compile_commands.json"
-  COPY_ON_ERROR
-)
-
-# add_executable(downloaderTest
-#   Downloader.cpp
-#   Downloader.h
-#   downloaderTest.cpp
-# )
-# target_link_libraries(downloaderTest PRIVATE ${RLS_LIBS})
-# target_link_options(downloaderTest PRIVATE "${RLS_LINK_OPTS}")
-
-# add_executable(rconTest
-#   Rcon.cpp
-#   Rcon.h
-#   rconTest.cpp
-# )
-# target_link_libraries(rconTest PRIVATE ${RLS_LIBS})
-# target_link_options(rconTest PRIVATE "${RLS_LINK_OPTS}")
-
-# add_executable(updaterTest
-#   Config.cpp
-#   Config.h
-#   Downloader.cpp
-#   Downloader.h
-#   Updater.cpp
-#   Updater.h
-#   updaterTest.cpp
-# )
-# target_link_libraries(updaterTest PRIVATE ${RLS_LIBS})
-# target_link_options(updaterTest PRIVATE "${RLS_LINK_OPTS}")
 
 include(GNUInstallDirs)
 # include(InstallRequiredSystemLibraries)

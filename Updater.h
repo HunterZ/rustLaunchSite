@@ -8,8 +8,11 @@
 
 namespace rustLaunchSite
 {
+// forward declarations
+
 class Config;
 class Downloader;
+class Logger;
 
 /// @brief Rust server and Carbon/Oxide modding framework updater facility
 /// @details Implements all facilities and logic relating to checking for,
@@ -28,14 +31,16 @@ public:
   ///  recoverable discrepencies between confgiuration and detected
   ///  installation/system states - or aborting in the case of unrecoverable
   ///  issues.
+  /// @param logger Logger instance
   /// @param cfgSptr Shared pointer to application configuration instance
   /// @param downloaderUptr Shared pointer to download facility instance
   /// @throw @c std::invalid_argument or @c std::runtime_error if unrecoverable
   ///  conditions are detected (e.g. unable to allocate dependencies, basic
   ///  application configuration appears invalid, etc.)
   explicit Updater(
-    std::shared_ptr<const Config> cfgSptr,
-    std::shared_ptr<Downloader> downloaderSptr
+    Logger& logger
+  , std::shared_ptr<const Config> cfgSptr
+  , std::shared_ptr<Downloader> downloaderSptr
   );
 
   /// @brief Destructor
@@ -84,9 +89,10 @@ private:
   // Logs a warning if warn=true (default) and the specified path could not be
   //  found.
   static std::string GetAppManifestValue(
-    const std::filesystem::path& appManifestPath,
-    const std::string_view keyPath,
-    const bool warn = true
+    Logger& logger
+  , const std::filesystem::path& appManifestPath
+  , const std::string_view keyPath
+  , const bool warn = true
   );
 
   // Get version number of the current Carbon/Oxide installation, or empty if
@@ -133,6 +139,8 @@ private:
   // path to Carbon/Oxide modding framework DLL derived from server install path
   // may be empty if not installed, and/or modding framework updating disabled
   std::filesystem::path frameworkDllPath_;
+  // logger
+  Logger& logger_;
 };
 }
 

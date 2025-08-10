@@ -10,6 +10,8 @@
 
 namespace rustLaunchSite
 {
+class Logger;
+
 /// @brief rustLaunchSite application configuration facility
 /// @details Abstracts use of config file parser to load config file data into
 ///  an instance of this class, which can then be queried for settings. Only
@@ -86,7 +88,7 @@ public:
   ///  specified config file.
   /// @param configFile Configuration file to load
   /// @throw @c std::invalid_argument on parse or validation failure
-  explicit Config(std::filesystem::path configFile);
+  explicit Config(Logger& logger, std::filesystem::path configFile);
 
   // accessor methods for loaded settings
 
@@ -188,6 +190,10 @@ private:
 
   ParameterMapType minusParams_ = {};
   ParameterMapType plusParams_ = {};
+
+  // logger
+
+  Logger& logger_;
 
   // disabled constructors/operators
 

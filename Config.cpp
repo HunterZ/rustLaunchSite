@@ -1,7 +1,7 @@
 #include "Config.h"
 
+#include "Logger.h"
 #include <boost/process/v1/search_path.hpp>
-#include <iostream>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -51,12 +51,13 @@ void GetOptionalValueTo(
 //    starting point will be passed in, and `path` will be used as its name in
 //    place of its actual key in order to support a custom parameter prefix
 void GetParametersTo(
-  rustLaunchSite::Config::ParameterMapType& pMap
+  rustLaunchSite::Logger& logger
+, rustLaunchSite::Config::ParameterMapType& pMap
 , const nlohmann::json& j
 , const std::string& path
 )
 {
-  // std::cout << "GetParametersTo(): Called with path=" << path << std::endl;
+  // std::cout << "GetParametersTo(): Called with path=" << path);
 
   // iterate over all items under j
   for (const auto& [key, value] : j.items())
@@ -69,37 +70,37 @@ void GetParametersTo(
       case nlohmann::json::value_t::boolean:
       {
         pMap.try_emplace(itemPath, value.template get<bool>());
-        // std::cout << "GetParametersTo(): Emplaced bool " << itemPath << " = " << pMap.at(itemPath).ToString() << std::endl;
+        // std::cout << "GetParametersTo(): Emplaced bool " << itemPath << " = " << pMap.at(itemPath).ToString());
       }
       break;
       case nlohmann::json::value_t::number_float:
       {
         pMap.try_emplace(itemPath, value.template get<double>());
-        // std::cout << "GetParametersTo(): Emplaced double " << itemPath << " = " << pMap.at(itemPath).ToString() << std::endl;
+        // std::cout << "GetParametersTo(): Emplaced double " << itemPath << " = " << pMap.at(itemPath).ToString());
       }
       break;
       case nlohmann::json::value_t::number_integer:
       case nlohmann::json::value_t::number_unsigned:
       {
         pMap.try_emplace(itemPath, value.template get<int>());
-        // std::cout << "GetParametersTo(): Emplaced int " << itemPath << " = " << pMap.at(itemPath).ToString() << std::endl;
+        // std::cout << "GetParametersTo(): Emplaced int " << itemPath << " = " << pMap.at(itemPath).ToString());
       }
       break;
       case nlohmann::json::value_t::object:
       {
-        // std::cout << "GetParametersTo(): Recursing into " << itemPath << std::endl;
-        GetParametersTo(pMap, value, itemPath + ".");
+        // std::cout << "GetParametersTo(): Recursing into " << itemPath);
+        GetParametersTo(logger, pMap, value, itemPath + ".");
       }
       break;
       case nlohmann::json::value_t::string:
       {
         pMap.try_emplace(itemPath, value.template get<std::string>());
-        // std::cout << "GetParametersTo(): Emplaced string " << itemPath << " = " << pMap.at(itemPath).ToString() << std::endl;
+        // std::cout << "GetParametersTo(): Emplaced string " << itemPath << " = " << pMap.at(itemPath).ToString());
       }
       break;
       default:
       {
-        std::cout << "WARNING: Ignoring JSON itemPath='" << itemPath << "' with unsupported type" << std::endl;
+        LOG_WARNING(logger, "Ignoring JSON itemPath='" << itemPath << "' with unsupported type");
       }
     }
   }
@@ -107,9 +108,11 @@ void GetParametersTo(
 }
 namespace rustLaunchSite
 {
-Config::Config(std::filesystem::path configFile)
+Config::Config(Logger& logger, std::filesystem::path configFile)
+  : logger_{logger}
 {
   configFile.make_preferred();
+  LOG_INFO(logger_, "Loading config file: " << configFile);
   // attempt to parse configFile via nlohmann/json
   nlohmann::json j{};
   try
@@ -259,7 +262,7 @@ Config::Config(std::filesystem::path configFile)
         jRlsSteamcmd.at("path").get_to(steamcmdPath_);
         if (!std::filesystem::exists(steamcmdPath_))
         {
-          std::cout << "WARNING: steamcmd not found at configured path " << steamcmdPath_ << "; will attempt to get from environment\n";
+          LOG_WARNING(logger_, "SteamCMD not found at configured path " << steamcmdPath_ << "; will attempt to get from environment");
         }
       }
     }
@@ -272,11 +275,11 @@ Config::Config(std::filesystem::path configFile)
     steamcmdPath_.make_preferred();
     if (std::filesystem::exists(steamcmdPath_))
     {
-      std::cout << "INFO: using steamcmd at path: " << steamcmdPath_ << "\n";
+      LOG_INFO(logger_, "Using SteamCMD at path: " << steamcmdPath_);
     }
     else
     {
-      std::cout << "WARNING: steamcmd not found; dependent features may not work\n";
+      LOG_WARNING(logger_, "SteamCMD not found; dependent features may not work");
     }
 
     // update
@@ -320,7 +323,7 @@ Config::Config(std::filesystem::path configFile)
         }
         else if (!modFrameworkType.empty())
         {
-          std::cout << "WARNING: Ignoring unsupported modFramework.type value: '" << modFrameworkType << "'" << std::endl;
+          LOG_WARNING(logger_, "Ignoring unsupported modFramework.type value: '" << modFrameworkType << "'");
         }
         if (updateModFrameworkType_ != ModFrameworkType::NONE)
         {
@@ -351,19 +354,19 @@ Config::Config(std::filesystem::path configFile)
       else if (updateIntervalMinutes_
         && !updateServerOnInterval_ && !updateModFrameworkOnInterval_)
       {
-        std::cout << "WARNING: Ignoring update.intervalMinutes value because update.server and update.modFramework onInterval are both false: '" << updateIntervalMinutes_ << "'" << std::endl;
+        LOG_WARNING(logger_, "Ignoring update.intervalMinutes value because update.server and update.modFramework onInterval are both false: '" << updateIntervalMinutes_ << "'");
         updateIntervalMinutes_ = 0;
       }
       if (!updateIntervalMinutes_)
       {
         if (updateServerOnInterval_)
         {
-          std::cout << "WARNING: Ignoring update.server.onInterval=true because update.intervalMinutes=0" << std::endl;
+          LOG_WARNING(logger_, "Ignoring update.server.onInterval=true because update.intervalMinutes=0");
           updateServerOnInterval_ = false;
         }
         if (updateModFrameworkOnInterval_)
         {
-          std::cout << "WARNING: Ignoring update.modFramework.onInterval=true because update.intervalMinutes=0" << std::endl;
+          LOG_WARNING(logger_, "Ignoring update.modFramework.onInterval=true because update.intervalMinutes=0");
           updateModFrameworkOnInterval_ = false;
         }
       }
@@ -383,11 +386,11 @@ Config::Config(std::filesystem::path configFile)
       const auto& jRd{j.at("rustDedicated")};
       if (jRd.contains("minusParams"))
       {
-        GetParametersTo(minusParams_, jRd.at("minusParams"), "-");
+        GetParametersTo(logger, minusParams_, jRd.at("minusParams"), "-");
       }
       if (jRd.contains("plusParams"))
       {
-        GetParametersTo(plusParams_, jRd.at("plusParams"), "+");
+        GetParametersTo(logger, plusParams_, jRd.at("plusParams"), "+");
       }
     }
   }
