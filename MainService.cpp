@@ -36,8 +36,7 @@ std::filesystem::path GetConfigPath()
 {
   // check environment variable
   const auto& myEnv(boost::this_process::environment());
-  const auto& envIter(myEnv.find(ENV_CONFIG_PATH));
-  if (myEnv.end() != envIter)
+  if (const auto& envIter(myEnv.find(ENV_CONFIG_PATH)); myEnv.end() != envIter)
   {
     const auto& envPath(
       std::filesystem::path{envIter->to_string()} / DEFAULT_CONFIG_FILE);
@@ -46,8 +45,7 @@ std::filesystem::path GetConfigPath()
 
 #if defined(_WIN32) || defined(_WIN64)
   // check LOCALAPPDATA
-  const auto& ladIter(myEnv.find("LOCALAPPDATA"));
-  if (myEnv.end() != ladIter)
+  if (const auto& ladIter(myEnv.find("LOCALAPPDATA")); myEnv.end() != ladIter)
   {
     const auto& ladPath(
       std::filesystem::path{ladIter->to_string()} / "rustLaunchSite" /
@@ -80,14 +78,21 @@ std::filesystem::path GetConfigPath()
 #endif
 
   // check working directory
-  const auto& cwdPath(std::filesystem::current_path() / DEFAULT_CONFIG_FILE);
-  if (std::filesystem::exists(cwdPath)) return cwdPath;
+  if (const auto& cwdPath(
+        std::filesystem::current_path() / DEFAULT_CONFIG_FILE);
+      std::filesystem::exists(cwdPath))
+  {
+    return cwdPath;
+  }
 
   // check binary directory
-  const auto& binPath(std::filesystem::path{
-    boost::dll::program_location().remove_filename_and_trailing_separators().string()}
-    / DEFAULT_CONFIG_FILE);
-  if (std::filesystem::exists(binPath)) return binPath;
+  if (const auto& binPath(std::filesystem::path{
+        boost::dll::program_location().remove_filename_and_trailing_separators().string()}
+        / DEFAULT_CONFIG_FILE);
+      std::filesystem::exists(binPath))
+  {
+    return binPath;
+  }
 
   // failure
   return {};
@@ -109,8 +114,7 @@ std::filesystem::path GetLogPath()
 {
   // check environment variable
   const auto& myEnv(boost::this_process::environment());
-  const auto& envIter(myEnv.find(ENV_LOG_PATH));
-  if (myEnv.end() != envIter)
+  if (const auto& envIter(myEnv.find(ENV_LOG_PATH)); myEnv.end() != envIter)
   {
     std::filesystem::path envPath{envIter->to_string()};
     // if the containing directory exists, consider this valid
@@ -123,8 +127,7 @@ std::filesystem::path GetLogPath()
 
 #if defined(_WIN32) || defined(_WIN64)
   // check LOCALAPPDATA
-  const auto& ladIter(myEnv.find("LOCALAPPDATA"));
-  if (myEnv.end() != ladIter)
+  if (const auto& ladIter(myEnv.find("LOCALAPPDATA")); myEnv.end() != ladIter)
   {
     const std::filesystem::path ladBasePath{ladIter->to_string()};
     auto ladAppPath(ladBasePath / "rustLaunchSite");
@@ -177,10 +180,10 @@ int main(int argc, char* argv[])
 #endif
       // Service name (service id)
       L"rustLaunchSite",
-      [&]()
+      [&logger, &rlsThread, &fakeArgv]()
       {
         LOG_INFO(logger, "Starting RLS thread");
-        rlsThread = std::thread{[&]()
+        rlsThread = std::thread{[&logger, &fakeArgv]()
         {
           LOG_INFO(logger, "Starting RLS core");
           rustLaunchSite::Start(
@@ -191,7 +194,7 @@ int main(int argc, char* argv[])
         }};
         LOG_INFO(logger, "RLS thread started");
       },
-      [&]()
+      [&logger, &rlsThread]()
       {
         LOG_INFO(logger, "Stopping RLS core");
         rustLaunchSite::Stop();

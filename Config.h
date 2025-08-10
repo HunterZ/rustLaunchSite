@@ -34,6 +34,7 @@ public:
 
   enum class SeedStrategy { FIXED, LIST, RANDOM };
 
+  // TODO: try refactoring this to use std::variant
   struct Parameter
   {
     std::optional<bool>        boolValue_;
@@ -75,7 +76,6 @@ public:
       if (boolValue_)   { s << *boolValue_;   return s.str(); }
       if (doubleValue_) { s << *doubleValue_; return s.str(); }
       if (intValue_)    { s << *intValue_;    return s.str(); }
-      // if (stringValue_) { return std::string("\"") + *stringValue_ + '\"'; }
       if (stringValue_) { return *stringValue_; }
       return "<UNKNOWN>";
     }

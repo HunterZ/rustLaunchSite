@@ -57,45 +57,39 @@ void GetParametersTo(
 , const std::string& path
 )
 {
-  // std::cout << "GetParametersTo(): Called with path=" << path);
-
   // iterate over all items under j
   for (const auto& [key, value] : j.items())
   {
     // add item's name to current level starting path to get its full path
     const std::string& itemPath{path + key};
     // store data values in map, or recruse into objects
+    using enum nlohmann::json::value_t;
     switch (value.type())
     {
-      case nlohmann::json::value_t::boolean:
+      case boolean:
       {
         pMap.try_emplace(itemPath, value.template get<bool>());
-        // std::cout << "GetParametersTo(): Emplaced bool " << itemPath << " = " << pMap.at(itemPath).ToString());
       }
       break;
-      case nlohmann::json::value_t::number_float:
+      case number_float:
       {
         pMap.try_emplace(itemPath, value.template get<double>());
-        // std::cout << "GetParametersTo(): Emplaced double " << itemPath << " = " << pMap.at(itemPath).ToString());
       }
       break;
-      case nlohmann::json::value_t::number_integer:
-      case nlohmann::json::value_t::number_unsigned:
+      case number_integer:
+      case number_unsigned:
       {
         pMap.try_emplace(itemPath, value.template get<int>());
-        // std::cout << "GetParametersTo(): Emplaced int " << itemPath << " = " << pMap.at(itemPath).ToString());
       }
       break;
-      case nlohmann::json::value_t::object:
+      case object:
       {
-        // std::cout << "GetParametersTo(): Recursing into " << itemPath);
         GetParametersTo(logger, pMap, value, itemPath + ".");
       }
       break;
-      case nlohmann::json::value_t::string:
+      case string:
       {
         pMap.try_emplace(itemPath, value.template get<std::string>());
-        // std::cout << "GetParametersTo(): Emplaced string " << itemPath << " = " << pMap.at(itemPath).ToString());
       }
       break;
       default:
@@ -205,9 +199,10 @@ Config::Config(Logger& logger, std::filesystem::path configFile)
       const auto& jRlsSeed{jRls.at("seed")};
       // string that needs to be converted to an enum
       seedStrategy_ = SeedStrategy::RANDOM;
-      const auto& seedStrategy{
-        GetOptionalValue<std::string>(jRlsSeed, "strategy")};
-      if (seedStrategy == "fixed")
+
+      if (const auto& seedStrategy{
+            GetOptionalValue<std::string>(jRlsSeed, "strategy")};
+          seedStrategy == "fixed")
       {
         seedStrategy_ = SeedStrategy::FIXED;
       }
@@ -311,9 +306,9 @@ Config::Config(Logger& logger, std::filesystem::path configFile)
         const auto& jRlsUpdateModFramework{jRlsUpdate.at("modFramework")};
         // process type first, because we want to force other values to false if
         //  it does not resolve to a valid value
-        const auto& modFrameworkType{GetOptionalValue<std::string>(
-          jRlsUpdateModFramework, "type")};
-        if ("carbon" == modFrameworkType)
+        if (const auto& modFrameworkType{GetOptionalValue<std::string>(
+              jRlsUpdateModFramework, "type")};
+            "carbon" == modFrameworkType)
         {
           updateModFrameworkType_ = ModFrameworkType::CARBON;
         }

@@ -9,7 +9,6 @@
   #include <sdkddkver.h>
 #endif
 
-// #include <boost/winapi/show_window.hpp>
 #include <boost/process/v1/args.hpp>
 #include <boost/process/v1/child.hpp>
 #include <boost/process/v1/exe.hpp>
@@ -31,17 +30,6 @@
 
 namespace
 {
-// wrap a string in double-quotes if it contains spaces
-inline std::string QuoteString(const std::string& s)
-{
-  return //(
-    // s.find(" ") == std::string::npos ?
-      s //:
-      // std::string("\"") + s + '\"'
-  //)
-  ;
-}
-
 #if _MSC_VER || defined(__MINGW32__)
 // boost::process extension to launch a process in a new console window
 // idea from https://stackoverflow.com/a/69774875/3171290 and
@@ -77,6 +65,15 @@ std::filesystem::path GetRustDedicatedPath(
     rustLaunchSite::Config::ModFrameworkType::CARBON ?
       "carbon.sh" : "runds.sh");
 #endif
+}
+
+constexpr std::chrono::seconds GetMarkIntervalSeconds(
+  const std::chrono::seconds& remainingSeconds)
+{
+  if (remainingSeconds.count() > 300) return std::chrono::seconds{300};
+  if (remainingSeconds.count() >  60) return std::chrono::seconds{ 60};
+  if (remainingSeconds.count() >  10) return std::chrono::seconds{ 10};
+  return                                     std::chrono::seconds{  1};
 }
 }
 
@@ -133,20 +130,20 @@ Server::Server(Logger& logger, std::shared_ptr<const Config> cfgSptr)
   //  "minus" parameters
   for (const auto& [mParamName, mParamData] : cfgSptr->GetMinusParams())
   {
-    const bool isBool(mParamData.boolValue_);
+    const bool isBool(mParamData.boolValue_.has_value());
     // if this a boolean set to false, skip it
     if (isBool && !*mParamData.boolValue_) { continue; }
     // push parameter name (prefix is already prepended)
-    rustDedicatedArguments_.push_back(QuoteString(mParamName));
+    rustDedicatedArguments_.push_back(mParamName);
     // if it's a boolean, skip the parameter value
     if (isBool) { continue; }
     // push value
-    rustDedicatedArguments_.push_back(QuoteString(mParamData.ToString()));
+    rustDedicatedArguments_.push_back(mParamData.ToString());
   }
   //  "plus" parameters
   for (const auto& [pParamName, pParamData] : cfgSptr->GetPlusParams())
   {
-    const bool isBool(pParamData.boolValue_);
+    const bool isBool(pParamData.boolValue_.has_value());
     // if this a boolean set to false, skip it
     if (isBool && !*pParamData.boolValue_) { continue; }
     // check for parameter names whose values may be overridden by
@@ -164,48 +161,49 @@ Server::Server(Logger& logger, std::shared_ptr<const Config> cfgSptr)
       continue;
     }
     // push parameter name (prefix is already prepended)
-    rustDedicatedArguments_.push_back(QuoteString(pParamName));
+    rustDedicatedArguments_.push_back(pParamName);
     // if it's a boolean, skip the parameter value
     if (isBool) { continue; }
     // push value
-    rustDedicatedArguments_.push_back(QuoteString(pParamData.ToString()));
+    rustDedicatedArguments_.push_back(pParamData.ToString());
   }
   // now set automatically-determined parameters
   rustDedicatedArguments_.emplace_back("+rcon.password");
-  rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetRconPassword()));
+  rustDedicatedArguments_.push_back(cfgSptr->GetRconPassword());
   if (cfgSptr->GetRconPassthroughIP())
   {
     rustDedicatedArguments_.emplace_back("+rcon.ip");
-    rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetRconIP()));
+    rustDedicatedArguments_.push_back(cfgSptr->GetRconIP());
   }
   if (cfgSptr->GetRconPassthroughPort())
   {
     rustDedicatedArguments_.emplace_back("+rcon.port");
     std::stringstream s;
     s << cfgSptr->GetRconPort();
-    rustDedicatedArguments_.push_back(QuoteString(s.str()));
+    rustDedicatedArguments_.push_back(s.str());
   }
   rustDedicatedArguments_.emplace_back("+rcon.web");
   rustDedicatedArguments_.emplace_back("1");
   rustDedicatedArguments_.emplace_back("+server.identity");
-  rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetInstallIdentity()));
+  rustDedicatedArguments_.push_back(cfgSptr->GetInstallIdentity());
   // seed is a bit complicated
   // TODO: ...and this isn't even the final logic needed!
   rustDedicatedArguments_.emplace_back("+server.seed");
   int seed(1);
+  using enum rustLaunchSite::Config::SeedStrategy;
   switch (cfgSptr->GetSeedStrategy())
   {
-    case Config::SeedStrategy::FIXED:
+    case FIXED:
     {
       seed = cfgSptr->GetSeedFixed();
     }
     break;
-    case Config::SeedStrategy::LIST:
+    case LIST:
     {
       seed = cfgSptr->GetSeedList().at(0);
     }
     break;
-    case Config::SeedStrategy::RANDOM:
+    case RANDOM:
     {
       seed = 1;
     }
@@ -298,7 +296,7 @@ bool Server::IsRunning() const
   //  tiny-process-library, or is boost::process smarter?
   auto& process{*(processImplUptr_->processUptr_)};
   std::error_code errorCode{};
-  return (process.running(errorCode));
+  return process.running(errorCode);
 }
 
 std::string Server::SendRconCommand(
@@ -485,12 +483,8 @@ void Server::StopDelay(std::string_view reason)
       )
     );
     // how often notifications are occurring based on time left
-    const std::chrono::seconds markIntervalSeconds(
-      remainingTimeSeconds.count() > 300 ? 300 :
-      remainingTimeSeconds.count() >  60 ?  60 :
-      remainingTimeSeconds.count() >  10 ?  10 :
-                                      1
-    );
+    const auto& markIntervalSeconds(
+      GetMarkIntervalSeconds(remainingTimeSeconds));
     // number of seconds until next notification
     const auto marksRemaining(
       remainingTimeSeconds / markIntervalSeconds

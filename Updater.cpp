@@ -6,7 +6,7 @@
 
 #if _MSC_VER
   // make Boost happy when building with MSVC
-  #include <SDKDDKVer.h>
+  #include <sdkddkver.h>
 #endif
 
 #include <boost/process/v1/args.hpp>
@@ -81,17 +81,19 @@ std::string_view ToString(
 )
 {
   std::size_t index{0};
+  using enum rustLaunchSite::Config::ModFrameworkType;
   switch (framework)
   {
-    case rustLaunchSite::Config::ModFrameworkType::NONE:   index = 0; break;
-    case rustLaunchSite::Config::ModFrameworkType::CARBON: index = 1; break;
-    case rustLaunchSite::Config::ModFrameworkType::OXIDE:  index = 2; break;
+    case NONE:   index = 0; break;
+    case CARBON: index = 1; break;
+    case OXIDE:  index = 2; break;
   }
+  using enum ToStringCase;
   switch (stringCase)
   {
-    case ToStringCase::LOWER: return FRAMEWORK_STRING_LOWER.at(index);
-    case ToStringCase::TITLE: return FRAMEWORK_STRING_TITLE.at(index);
-    case ToStringCase::UPPER: return FRAMEWORK_STRING_UPPER.at(index);
+    case LOWER: return FRAMEWORK_STRING_LOWER.at(index);
+    case TITLE: return FRAMEWORK_STRING_TITLE.at(index);
+    case UPPER: return FRAMEWORK_STRING_UPPER.at(index);
   }
   return {};
 }
@@ -101,13 +103,14 @@ std::filesystem::path GetFrameworkDllPath(
   const rustLaunchSite::Config::ModFrameworkType framework
 )
 {
+  using enum rustLaunchSite::Config::ModFrameworkType;
   switch (framework)
   {
-    case rustLaunchSite::Config::ModFrameworkType::NONE:
+    case NONE:
       break;
-    case rustLaunchSite::Config::ModFrameworkType::CARBON:
+    case CARBON:
       return serverInstallPath / "carbon/managed/Carbon.dll";
-    case rustLaunchSite::Config::ModFrameworkType::OXIDE:
+    case OXIDE:
       return serverInstallPath / "RustDedicated_Data/Managed/Oxide.Rust.dll";
   }
   return {};
@@ -125,12 +128,13 @@ const std::vector<std::string_view> FRAMEWORK_URL
 
 std::shared_ptr<struct archive> GetReadArchive()
 {
-  return {archive_read_new(), [](struct archive* h){archive_read_free(h);}};
+  return { // NOSONAR
+    archive_read_new(), [](struct archive* h){archive_read_free(h);}};
 }
 
 std::shared_ptr<struct archive> GetWriteDiskArchive()
 {
-  return {
+  return { // NOSONAR
     archive_write_disk_new(), [](struct archive* h){archive_write_free(h);}};
 }
 
@@ -191,14 +195,14 @@ bool IsExecutableFile(const std::filesystem::path& filePath)
 void FixPermissions(
   rustLaunchSite::Logger& logger, const std::filesystem::path& filePath)
 {
+  using enum std::filesystem::perms;
   if (!IsExecutableFile(filePath)) return;
   std::error_code ec{};
-  std::filesystem::permissions(filePath,
-    std::filesystem::perms::owner_exec
-    | std::filesystem::perms::group_exec
-    | std::filesystem::perms::others_exec,
-    std::filesystem::perm_options::add,
-    ec
+  std::filesystem::permissions(
+    filePath
+  , owner_exec | group_exec | others_exec
+  , std::filesystem::perm_options::add
+  , ec
   );
   if (ec)
   {
@@ -314,11 +318,12 @@ std::string_view GetFrameworkURL(
 )
 {
   std::size_t index{0};
+  using enum rustLaunchSite::Config::ModFrameworkType;
   switch (framework)
   {
-    case rustLaunchSite::Config::ModFrameworkType::NONE:   index = 0; break;
-    case rustLaunchSite::Config::ModFrameworkType::CARBON: index = 1; break;
-    case rustLaunchSite::Config::ModFrameworkType::OXIDE:  index = 2; break;
+    case NONE:   index = 0; break;
+    case CARBON: index = 1; break;
+    case OXIDE:  index = 2; break;
   }
   return FRAMEWORK_URL.at(index);
 }
@@ -346,11 +351,12 @@ std::string_view GetFrameworkAsset(
 )
 {
   std::size_t index{0};
+  using enum rustLaunchSite::Config::ModFrameworkType;
   switch (framework)
   {
-    case rustLaunchSite::Config::ModFrameworkType::NONE:   index = 0; break;
-    case rustLaunchSite::Config::ModFrameworkType::CARBON: index = 1; break;
-    case rustLaunchSite::Config::ModFrameworkType::OXIDE:  index = 2; break;
+    case NONE:   index = 0; break;
+    case CARBON: index = 1; break;
+    case OXIDE:  index = 2; break;
   }
   return FRAMEWORK_ASSET.at(index);
 }
@@ -386,23 +392,6 @@ Updater::Updater(
     throw std::invalid_argument(std::string("ERROR: Rust dedicated server not found in configured install path: ") + serverInstallPath_.string());
   }
 
-/*
-  if (std::filesystem::exists(appManifestPath_))
-  {
-    // extract SteamCMD utility path from manifest
-    steamCmdPath_ = GetAppManifestValue(appManifestPath_, "AppState.LauncherPath");
-    if (steamCmdPath_.empty())
-    {
-      LOG_WARNING(logger_, "Failed to locate SteamCMD path from manifest file " << appManifestPath_ << "; automatic Steam updates disabled");
-    }
-    else if (!std::filesystem::exists(steamCmdPath_))
-    {
-      LOG_WARNING(logger_, "Failed to locate SteamCMD at manifest file specified path " << steamCmdPath_ << "; automatic Steam updates disabled");
-      steamCmdPath_.clear();
-    }
-  }
-  else
-*/
   if (!std::filesystem::exists(appManifestPath_))
   {
     LOG_WARNING(logger_, "Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled");
@@ -542,7 +531,6 @@ void Updater::UpdateServer() const
     LOG_WARNING(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
     return;
   }
-  // LOG_INFO(logger_, "Server update successful");
 }
 
 std::string Updater::GetAppManifestValue(
@@ -750,7 +738,8 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   // this will hold the most recently read line of output from steamcmd
   std::string line;
   // track info blob extraction status
-  SteamCmdReadState readState(SteamCmdReadState::FIND_INFO_START);
+  using enum SteamCmdReadState;
+  SteamCmdReadState readState(FIND_INFO_START);
   // now process output from steamcmd one line at a time
   // NOTE: Boost.Process docs say not to read from steam unless app is
   //  running, but this truncates the output so F that - we do what works!
@@ -760,28 +749,28 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     if (line.empty()) continue;
     switch (readState)
     {
-      case SteamCmdReadState::FIND_INFO_START:
+      case FIND_INFO_START:
       {
         // looking for "258550" (in double quotes, at start of line)
         if (!line.empty() && line[0] == '\"' && line.find("\"258550\"") == 0)
         {
           appendLine = true;
-          readState = SteamCmdReadState::FIND_INFO_END;
+          readState = FIND_INFO_END;
         }
         break;
       }
-      case SteamCmdReadState::FIND_INFO_END:
+      case FIND_INFO_END:
       {
         // append all lines in this mode
         appendLine = true;
         // looking for "}" as the first character to signal info blob end
         if (!line.empty() && line[0] == '}')
         {
-          readState = SteamCmdReadState::COMPLETE;
+          readState = COMPLETE;
         }
         break;
       }
-      case SteamCmdReadState::COMPLETE:
+      case COMPLETE:
       {
         appendLine = false;
         break;
@@ -803,7 +792,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     LOG_WARNING(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
   }
   // audit output
-  if (readState != SteamCmdReadState::COMPLETE)
+  if (readState != COMPLETE)
   {
     LOG_WARNING(logger_, "SteamCMD output did not include a valid app info tree");
     return retVal;

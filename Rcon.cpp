@@ -64,8 +64,7 @@ struct WebSocketMessage
 {
   const ix::WebSocketMessagePtr& webSocketMessagePtr_;
 
-  //NOSONAR - this is IXWebSocket API
-  explicit WebSocketMessage(const ix::WebSocketMessagePtr& msgPtr)
+  explicit WebSocketMessage(const ix::WebSocketMessagePtr& msgPtr) // NOSONAR
     : webSocketMessagePtr_(msgPtr) {}
 
   virtual ~WebSocketMessage() = default;
@@ -174,24 +173,10 @@ std::string Rcon::SendCommand(
   // record pending request if we have an ID
   if (identifier)
   {
-    // LOG_INFO(logger_, "Queued request for RCON response to command ID=" << identifier);
     requests_.insert(identifier);
   }
-  // else
-  // {
-  //   LOG_INFO(logger_, "Not requesting response for RCON comamnd ID=" << identifier);
-  // }
 
   const auto& result((*webSocketUptr_)->send(j.dump()));
-  // std::cout
-  //   << "Sent RCON command via WebSocket"
-  //   << ": ID=" << identifier
-  //   << ", message=" << j.dump()
-  //   << ", compressionError=" << result.compressionError
-  //   << ", payloadSize=" << result.payloadSize
-  //   << ", success=" << result.success
-  //   << ", wireSize=" << result.wireSize
-  //  );
 
   // TODO: any special failure handling needed?
 
@@ -199,7 +184,6 @@ std::string Rcon::SendCommand(
   //  out here if no timeout specified
   if (!timeoutMilliseconds)
   {
-    // LOG_INFO(logger_, "*** skipping RCON response wait");
     return {};
   }
 
@@ -222,16 +206,14 @@ std::string Rcon::SendCommand(
     cv_.wait_until(
       lock, timeout, [this, identifier]()
       {
-        return (responses_.find(identifier) != responses_.end());
+        return responses_.contains(identifier);
       }
     );
-    // LOG_INFO(logger_, "*** success=" << success);
   }
 
   // remove pending request ID, as the transaction is considered complete at
   //  this point, regardless of outcome
   requests_.erase(identifier);
-  // LOG_INFO(logger_, "SendCommand(): Removed pending request ID=" << identifier);
 
   const auto responseIter(responses_.find(identifier));
   if (responseIter == responses_.end())
@@ -268,7 +250,7 @@ std::shared_ptr<RconInitHandle> Rcon::GetInitHandle(Logger& logger)
     // the handle is just a dummy type - what we really care about is attaching
     //  a custom deleter to perform uninit when the last copy of the shared_ptr
     //  goes away
-    rconInitHandleWptr_ = handleSptr = std::shared_ptr<RconInitHandle>(
+    rconInitHandleWptr_ = handleSptr = std::shared_ptr<RconInitHandle>( // NOSONAR
       // dummy object (have to use new instead of make_shared because of custom
       //  deleter)
       &RCON_INIT_HANDLE,
@@ -291,13 +273,6 @@ std::shared_ptr<RconInitHandle> Rcon::GetInitHandle(Logger& logger)
 void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
 {
   std::scoped_lock lock(mutex_);
-
-  // LOG_INFO(logger_, "Processing WebSocket event; pending request IDs: {";
-  // for (const auto i : requests_)
-  // {
-  //   LOG_INFO(logger_, " " << i;
-  // }
-  // LOG_INFO(logger_, " }");
 
   const auto& msg(*message);
   switch (msg.type)
@@ -324,7 +299,7 @@ void Rcon::WebsocketMessageHandler(const WebSocketMessage& message)
       }
       if (const auto id(j["Identifier"].get<REQUEST_ID_TYPE>()); id && !isChat)
       {
-        if (!requests_.count(id))
+        if (!requests_.contains(id))
         {
           // we can now log this, because we use id=0 when not expecting a
           //  response

@@ -18,9 +18,12 @@ namespace
   constexpr auto TIME_FORMAT("{0:%F}T{0:%T%z}");
   constexpr auto TIME_SEPARATOR(":");
 
-  const std::string& ToString(const rustLaunchSite::Logger::Level level)
+  const std::string& ToString(
+    const rustLaunchSite::Logger::Level level) noexcept
   {
-    return LOG_LEVELS.at(static_cast<std::size_t>(level));
+    const auto levelNum(static_cast<std::size_t>(level));
+    return levelNum >= LOG_LEVELS.size() ?
+      LOG_LEVELS.back() : LOG_LEVELS.at(levelNum);
   }
 
   std::string ToString(
@@ -71,9 +74,10 @@ Logger::Logger(const std::filesystem::path& outputFile)
 Logger::~Logger()
 {
   // stop and join flush thread
-  std::unique_lock lock{mutex_};
-  stopFlush_ = true;
-  lock.unlock();
+  {
+    std::lock_guard lock{mutex_};
+    stopFlush_ = true;
+  }
   flushThread_.join();
 }
 

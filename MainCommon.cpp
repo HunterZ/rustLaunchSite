@@ -25,22 +25,22 @@ enum class TimerState
 // mutex and mutex-controlled thread data
 namespace threadData
 {
-  // mutex that controls access to sibling variables
-  std::mutex mutex_;
-  // CV on which main() waits for notifications
-  std::condition_variable cvMain_;
-  // CV on which timer thread waits for notifications
-  std::condition_variable cvTimer_;
-  // timer thread state commanded by main()
-  TimerState timerState_{TimerState::RUN};
-  // whether Stop() handler is notifying main() to shut down
-  bool notifyMainStop_{false};
-  // whether timer thread is notifying main() to check server health
-  bool notifyMainServer_{false};
-  // whether timer thread is notifying main() to check for updates
-  bool notifyMainUpdater_{false};
-  // whether main() is notifying timer thread to change state
-  bool notifyTimerThread_{false};
+// mutex that controls access to sibling variables
+std::mutex mutex_;
+// CV on which main() waits for notifications
+std::condition_variable cvMain_;
+// CV on which timer thread waits for notifications
+std::condition_variable cvTimer_;
+// timer thread state commanded by main()
+TimerState timerState_{TimerState::RUN};
+// whether Stop() handler is notifying main() to shut down
+bool notifyMainStop_{false};
+// whether timer thread is notifying main() to check server health
+bool notifyMainServer_{false};
+// whether timer thread is notifying main() to check for updates
+bool notifyMainUpdater_{false};
+// whether main() is notifying timer thread to change state
+bool notifyTimerThread_{false};
 };
 
 // (re)set start time and wake/notification times based on duration inputs
@@ -153,8 +153,8 @@ std::pair<bool, bool> UpdateCheck(
     LOG_INFO(logger, "Performing server update check");
     retVal.first = updater.CheckServer();
   }
-  const bool forceCheck{updateModFrameworkOnServer && retVal.first};
-  if (checkModFramework || forceCheck)
+  if (const bool forceCheck{updateModFrameworkOnServer && retVal.first};
+      checkModFramework || forceCheck)
   {
     LOG_INFO(logger, "Performing mod framework update check");
     retVal.second = updater.CheckFramework();
@@ -227,7 +227,7 @@ void UpdateServer(
 // get shutdown reason from text file if one exists
 std::string GetShutdownReason(
   rustLaunchSite::Logger& logger
-, std::filesystem::path reasonPath
+, const std::filesystem::path& reasonPath
 , std::string_view fallbackReason = {})
 {
   if (!std::filesystem::exists(reasonPath))
@@ -360,7 +360,6 @@ int Start(Logger& logger, int argc, char* argv[])
     }
 
     // main loop
-    // bool gotProtocol(false);
     LOG_INFO(logger, "Starting main event loop");
     while (true)
     {
@@ -379,11 +378,6 @@ int Start(Logger& logger, int argc, char* argv[])
           );
         }
       );
-      // LOG_INFO(logger, "rustLauchSite: Woke up with state:"
-      //   << " Stop=" << threadData::notifyMainStop_
-      //   << ", Server=" << threadData::notifyMainServer_
-      //   << ", Updater=" << threadData::notifyMainUpdater_
-      //  );
       // handle Stop() notification
       if (threadData::notifyMainStop_)
       {
@@ -472,19 +466,10 @@ int Start(Logger& logger, int argc, char* argv[])
           // server is running; check for protocol via RCON
           // just poll every time, as RCON connection seems to die if we don't
           //  use it?
-          // if (!gotProtocol)
-          // {
-          if
-          (
-            const auto& serverInfo(serverUptr->GetInfo());
-            serverInfo.valid_
-          )
+          if (const auto& serverInfo(serverUptr->GetInfo());
+              serverInfo.valid_)
           {
-            // gotProtocol = true;
             LOG_INFO(logger, "rustLaunchSite: Got server info via RCON: players=" << serverInfo.players_ << ", protocol=" << serverInfo.protocol_);
-    // TODO: poll server for protocol version via RCON, triggering wipe
-    //  processing if a change is detected since last run
-            // }
           }
         }
         // server is not running

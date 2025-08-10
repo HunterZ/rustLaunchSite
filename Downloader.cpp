@@ -201,10 +201,12 @@ Downloader::InitHandle Downloader::GetInitHandle(Logger& logger)
   static std::size_t handleNumber{0};
   static std::weak_ptr<std::size_t> handleWptr{};
 
-  // attempt to upgrade weak pointer to a shared pointer ASAP
-  auto existingHandleSptr{handleWptr.lock()};
-  // if we got a valid shared pointer, return it
-  if (existingHandleSptr) { return existingHandleSptr; }
+  // attempt to upgrade weak pointer to a shared pointer ASAP, and return one if
+  //  we get it
+  if (auto existingHandleSptr{handleWptr.lock()}; existingHandleSptr)
+  {
+    return existingHandleSptr;
+  }
 
   // shared pointer is invalid, so make a new one
   ++handleNumber;
@@ -212,7 +214,7 @@ Downloader::InitHandle Downloader::GetInitHandle(Logger& logger)
   curl_global_init(CURL_GLOBAL_ALL);
   // shared pointer points at our static handle count, but instead of managing
   //  its memory, the deleter performs a global libcurl cleanup action
-  InitHandle newHandleSptr
+  InitHandle newHandleSptr // NOSONAR
   {
     &handleNumber, [&logger](std::size_t const* hn)
     {
