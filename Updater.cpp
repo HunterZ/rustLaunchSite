@@ -46,16 +46,6 @@ inline bool IsDirectory(const std::filesystem::path& path)
   return std::filesystem::is_directory(targetPath);
 }
 
-inline bool IsWritable(const std::filesystem::path& path)
-{
-  // std::filesystem is garbage here, so we need to use access() or similar
-#if _MSC_VER
-  return (0 == _access_s(path.string().c_str(), 2));
-#else
-  return (0 == access(path.string().c_str(), W_OK));
-#endif
-}
-
 enum class SteamCmdReadState
 {
   FIND_INFO_START,
@@ -743,7 +733,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   // now process output from steamcmd one line at a time
   // NOTE: Boost.Process docs say not to read from steam unless app is
   //  running, but this truncates the output so F that - we do what works!
-  while (/*sc.running() &&*/ std::getline(fromChild, line))
+  while (std::getline(fromChild, line))
   {
     bool appendLine(false);
     if (line.empty()) continue;

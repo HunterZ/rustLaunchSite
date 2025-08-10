@@ -73,10 +73,10 @@ public:
     std::string ToString() const
     {
       std::stringstream s;
-      if (boolValue_)   { s << *boolValue_;   return s.str(); }
-      if (doubleValue_) { s << *doubleValue_; return s.str(); }
-      if (intValue_)    { s << *intValue_;    return s.str(); }
-      if (stringValue_) { return *stringValue_; }
+      if (boolValue_.has_value())   { s << *boolValue_;   return s.str(); }
+      if (doubleValue_.has_value()) { s << *doubleValue_; return s.str(); }
+      if (intValue_.has_value())    { s << *intValue_;    return s.str(); }
+      if (stringValue_.has_value()) { return *stringValue_; }
       return "<UNKNOWN>";
     }
   };
