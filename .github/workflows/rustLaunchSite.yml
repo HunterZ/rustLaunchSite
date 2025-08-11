@@ -65,24 +65,12 @@ jobs:
       #     chmod -f 0700 /home/runner/.ssh
       #     curl --silent https://api.github.com/meta | jq --raw-output '"github.com "+.ssh_keys[]' >> /home/runner/.ssh/known_hosts
       #     chmod -f 600 /home/runner/.ssh/known_hosts
-      # - name: Setup secrets (2/2)
-      #   uses: webfactory/ssh-agent@v0.9.0
-      #   with:
-      #     ssh-private-key: |
-      #       ${{ secrets.SSH_KEY_CTRLC }}
-      #       ${{ secrets.SSH_KEY_SRVLIB }}
-      - name: Setup ctrl-c deploy key
-        uses: shimataro/ssh-key-action@v2
+      - name: Setup secrets
+        uses: webfactory/ssh-agent@v0.9.1
         with:
-          key: ${{ secrets.SSH_KEY_CTRLC }}
-          name: id_ctrl-c
-          known_hosts: unnecessary
-      - name: Setup SrvLib deploy key
-        uses: shimataro/ssh-key-action@v2
-        with:
-          key: ${{ secrets.SSH_KEY_SRVLIB }}
-          name: id_SrvLib
-          known_hosts: unnecessary
+          ssh-private-key: |
+            ${{ secrets.SSH_KEY_CTRLC }}
+            ${{ secrets.SSH_KEY_SRVLIB }}
 
       - name: Setup Linux environment
         if: ${{ env.MSYSTEM == 'LINUX' }}
@@ -136,8 +124,8 @@ jobs:
 
       - name: Setup git workspace
         uses: actions/checkout@v4
-        with:
-          submodules: true
+        # with:
+        #   submodules: true
 
       # vcpkg internal caching is currently broken; cache everything in its
       #  install and build trees
