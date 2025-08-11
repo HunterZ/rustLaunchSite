@@ -145,8 +145,8 @@ std::filesystem::path GetLogPath()
   // fallback to working directory
   return std::filesystem::current_path() / DEFAULT_LOG_FILE;
 }
-}
 #endif
+}
 
 /// Main entry point for service flavor
 int main(int argc, char* argv[])
