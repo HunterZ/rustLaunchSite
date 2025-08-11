@@ -2,8 +2,8 @@
 #define CONFIG_H
 
 #include <filesystem>
+#include <format>
 #include <map>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -24,11 +24,12 @@ public:
   enum class ModFrameworkType { NONE, CARBON, OXIDE };
   static std::string ToString(const ModFrameworkType type)
   {
+    using enum ModFrameworkType;
     switch (type)
     {
-      case ModFrameworkType::NONE:   return "None";
-      case ModFrameworkType::CARBON: return "Carbon";
-      case ModFrameworkType::OXIDE:  return "Oxide";
+      case NONE:   return "None";
+      case CARBON: return "Carbon";
+      case OXIDE:  return "Oxide";
     }
     return "Unknown";
   }
