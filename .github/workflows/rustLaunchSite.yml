@@ -76,11 +76,13 @@ jobs:
         with:
           key: ${{ secrets.SSH_KEY_CTRLC }}
           name: id_ctrl-c
+          known_hosts: fake123
       - name: Setup SrvLib deploy key
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_KEY_SRVLIB }}
           name: id_SrvLib
+          known_hosts: fake123
 
       - name: Setup Linux environment
         if: ${{ env.MSYSTEM == 'LINUX' }}
