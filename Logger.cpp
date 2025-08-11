@@ -58,7 +58,7 @@ namespace
     {
       throw std::runtime_error(std::string("Failed to open log file for output: ") + outputFile.string());
     }
-    return std::move(retVal);
+    return retVal;
   }
 }
 

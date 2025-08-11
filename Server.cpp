@@ -130,9 +130,9 @@ Server::Server(Logger& logger, std::shared_ptr<const Config> cfgSptr)
   //  "minus" parameters
   for (const auto& [mParamName, mParamData] : cfgSptr->GetMinusParams())
   {
-    const bool isBool(mParamData.boolValue_.has_value());
+    const auto isBool(mParamData.IsBool());
     // if this a boolean set to false, skip it
-    if (isBool && !*mParamData.boolValue_) { continue; }
+    if (isBool && !mParamData.GetBool()) { continue; }
     // push parameter name (prefix is already prepended)
     rustDedicatedArguments_.push_back(mParamName);
     // if it's a boolean, skip the parameter value
@@ -143,9 +143,9 @@ Server::Server(Logger& logger, std::shared_ptr<const Config> cfgSptr)
   //  "plus" parameters
   for (const auto& [pParamName, pParamData] : cfgSptr->GetPlusParams())
   {
-    const bool isBool(pParamData.boolValue_.has_value());
+    const bool isBool(pParamData.IsBool());
     // if this a boolean set to false, skip it
-    if (isBool && !*pParamData.boolValue_) { continue; }
+    if (isBool && !pParamData.GetBool()) { continue; }
     // check for parameter names whose values may be overridden by
     //  rustLaunchSite configuration
     if (

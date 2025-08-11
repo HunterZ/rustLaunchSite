@@ -98,6 +98,8 @@ std::filesystem::path GetConfigPath()
   return {};
 }
 
+// make this windows-only for now
+#if defined(_WIN32) || defined(_WIN64)
 /// @brief Try to determine a suitable log file path
 ///
 /// @details Returns the full path for the first location in the list below that
@@ -125,7 +127,6 @@ std::filesystem::path GetLogPath()
     }
   }
 
-#if defined(_WIN32) || defined(_WIN64)
   // check LOCALAPPDATA
   if (const auto& ladIter(myEnv.find("LOCALAPPDATA")); myEnv.end() != ladIter)
   {
@@ -140,12 +141,12 @@ std::filesystem::path GetLogPath()
     ladAppPath /= DEFAULT_LOG_FILE;
     return ladAppPath;
   }
-#endif
 
   // fallback to working directory
   return std::filesystem::current_path() / DEFAULT_LOG_FILE;
 }
 }
+#endif
 
 /// Main entry point for service flavor
 int main(int argc, char* argv[])
