@@ -45,14 +45,29 @@ find_package(nlohmann_json CONFIG REQUIRED)
 
 # fetch dependencies that we're forced to build from source
 include(FetchContent)
-FetchContent_Declare(ctrl-c
-  GIT_REPOSITORY git@github.com:HunterZ/ctrl-c.git
-  GIT_TAG        master
-)
-FetchContent_Declare(SrvLib
-  GIT_REPOSITORY git@github.com:HunterZ/SrvLib.git
-  GIT_TAG        master
-)
+if(DEFINED ENV{CI})
+  # ironically, github workflows don't seem to allow FetchContent to clone repos
+  #  from their own site, so assume that they've been cloned into subdirectories
+  #  when operating in a CI environment
+  message("RLS: Assuming github dependencies are already cloned")
+  FetchContent_Declare(ctrl-c
+    SOURCE_DIR "${PROJECT_SOURCE_DIR}/subprojects/ctrl-c"
+  )
+  FetchContent_Declare(SrvLib
+    SOURCE_DIR "${PROJECT_SOURCE_DIR}/subprojects/SrvLib"
+  )
+else()
+  # normal case: clone the dependencies from github
+  message("RLS: Assuming github dependencies need to be cloned")
+  FetchContent_Declare(ctrl-c
+    GIT_REPOSITORY git@github.com:HunterZ/ctrl-c.git
+    GIT_TAG        master
+  )
+  FetchContent_Declare(SrvLib
+    GIT_REPOSITORY git@github.com:HunterZ/SrvLib.git
+    GIT_TAG        master
+  )
+endif()
 FetchContent_MakeAvailable(ctrl-c SrvLib)
 
 set(RLS_COMPILE_FEATURES cxx_std_20)
@@ -92,7 +107,6 @@ target_link_libraries(${RLS_OBJECT_TARGET} PRIVATE
   nlohmann_json::nlohmann_json
 )
 target_link_options(${RLS_OBJECT_TARGET} PRIVATE ${RLS_LINK_OPTS})
-
 
 # build a console binary
 add_executable(${PROJECT_NAME} MainConsole.cpp)
