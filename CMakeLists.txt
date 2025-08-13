@@ -5,6 +5,10 @@ project(rustLaunchSite
   VERSION 0.0.1
 )
 
+# Sonar is too stupid to ignore missing .modmap files, and we don't need them
+#  in this project anyway, so tell CMake not to generate them
+set(CMAKE_CXX_SCAN_FOR_MODULES 0)
+
 set(RLS_STATIC ON CACHE BOOL "Use static linking")
 if(RLS_STATIC)
   message("RLS: Configuring for static linking")
@@ -39,20 +43,51 @@ find_package(ixwebsocket CONFIG REQUIRED)
 find_package(LibArchive REQUIRED) # no config-mode file provided for this one
 find_package(nlohmann_json CONFIG REQUIRED)
 
-# build ctrl-c library (as static for simplicity)
-add_library(ctrl-c STATIC
-  ctrl-c/src/ctrl-c.cpp
-  ctrl-c/src/ctrl-c.h
-)
-target_include_directories(ctrl-c INTERFACE "${CMAKE_SOURCE_DIR}/ctrl-c/src")
+# fetch dependencies that we're forced to build from source
+include(FetchContent)
+if(DEFINED ENV{CI})
+  # ironically, github workflows don't seem to allow FetchContent to clone repos
+  #  from their own site, so assume that they've been cloned into subdirectories
+  #  when operating in a CI environment
+  message("RLS: Assuming github dependencies are already cloned")
+  FetchContent_Declare(ctrl-c
+    SOURCE_DIR "${PROJECT_SOURCE_DIR}/subprojects/ctrl-c"
+  )
+  FetchContent_Declare(SrvLib
+    SOURCE_DIR "${PROJECT_SOURCE_DIR}/subprojects/SrvLib"
+  )
+else()
+  # normal case: clone the dependencies from github
+  message("RLS: Assuming github dependencies need to be cloned")
+  FetchContent_Declare(ctrl-c
+    GIT_REPOSITORY git@github.com:HunterZ/ctrl-c.git
+    GIT_TAG        master
+  )
+  FetchContent_Declare(SrvLib
+    GIT_REPOSITORY git@github.com:HunterZ/SrvLib.git
+    GIT_TAG        master
+  )
+endif()
+FetchContent_MakeAvailable(ctrl-c SrvLib)
 
-# target for building the game binary
-add_executable(${PROJECT_NAME}
+set(RLS_COMPILE_FEATURES cxx_std_20)
+if(MSVC)
+  set(RLS_COMPILE_OPTIONS /W4 /WX)
+else()
+  set(RLS_COMPILE_OPTIONS -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+# build common stuff into an object library
+set(RLS_OBJECT_TARGET "${PROJECT_NAME}Obj")
+add_library(${RLS_OBJECT_TARGET} OBJECT
   Config.cpp
   Config.h
   Downloader.cpp
   Downloader.h
-  main.cpp
+  Logger.cpp
+  Logger.h
+  MainCommon.cpp
+  MainCommon.h
   Rcon.cpp
   Rcon.h
   Server.cpp
@@ -60,71 +95,56 @@ add_executable(${PROJECT_NAME}
   Updater.cpp
   Updater.h
 )
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
-target_compile_options(${PROJECT_NAME} PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,/W4 /WX,-Wall -Wextra -Wpedantic -Werror>
-)
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_compile_features(${RLS_OBJECT_TARGET} PUBLIC ${RLS_COMPILE_FEATURES})
+target_compile_options(${RLS_OBJECT_TARGET} PRIVATE ${RLS_COMPILE_OPTIONS})
+target_link_libraries(${RLS_OBJECT_TARGET} PRIVATE
   Boost::boost
   Boost::filesystem
   Boost::process
-  ctrl-c
   CURL::libcurl
   ixwebsocket::ixwebsocket
   LibArchive::LibArchive
   nlohmann_json::nlohmann_json
 )
-target_link_options(${PROJECT_NAME} PRIVATE "${RLS_LINK_OPTS}")
+target_link_options(${RLS_OBJECT_TARGET} PRIVATE ${RLS_LINK_OPTS})
 
+# build a console binary
+add_executable(${PROJECT_NAME} MainConsole.cpp)
+target_compile_features(${PROJECT_NAME} PUBLIC ${RLS_COMPILE_FEATURES})
+target_compile_options(${PROJECT_NAME} PRIVATE ${RLS_COMPILE_OPTIONS})
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  ${RLS_OBJECT_TARGET}
+  ctrl-c
+)
+target_link_options(${PROJECT_NAME} PRIVATE ${RLS_LINK_OPTS})
 add_custom_command(TARGET ${PROJECT_NAME}
   POST_BUILD
-  # DEPENDS ${PROJECT_NAME}
   COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
     ARGS "--strip-all" "$<TARGET_FILE:${PROJECT_NAME}>"
 )
 
-# clangd can't find compile_commands.json in presets mode, so create a link to
-#  it in the project root directory (this is a hard link so that it also works
-#  on Windows)
-# note that it may not exist soon enough, since it's generated during configure,
-#  so a touch action is used to create a temporary stand-in first if needed
-set(COMPILE_COMMANDS_PATH "${CMAKE_BINARY_DIR}/compile_commands.json")
-if(NOT EXISTS "${COMPILE_COMMANDS_PATH}")
-  file(TOUCH "${COMPILE_COMMANDS_PATH}")
+# build a service binary
+if(WIN32)
+  set(RLS_SERVICE_TARGET "${PROJECT_NAME}Svc")
+else()
+  set(RLS_SERVICE_TARGET "${PROJECT_NAME}d")
 endif()
-file(CREATE_LINK
-  "${COMPILE_COMMANDS_PATH}"
-  "${CMAKE_SOURCE_DIR}/compile_commands.json"
-  COPY_ON_ERROR
+add_executable(${RLS_SERVICE_TARGET} MainService.cpp)
+target_compile_features(${RLS_SERVICE_TARGET} PUBLIC ${RLS_COMPILE_FEATURES})
+target_compile_options(${RLS_SERVICE_TARGET} PRIVATE ${RLS_COMPILE_OPTIONS})
+target_link_libraries(${RLS_SERVICE_TARGET} PRIVATE
+  ${RLS_OBJECT_TARGET}
+  Boost::boost
+  Boost::filesystem
+  Boost::process
+  srvlib
 )
-
-# add_executable(downloaderTest
-#   Downloader.cpp
-#   Downloader.h
-#   downloaderTest.cpp
-# )
-# target_link_libraries(downloaderTest PRIVATE ${RLS_LIBS})
-# target_link_options(downloaderTest PRIVATE "${RLS_LINK_OPTS}")
-
-# add_executable(rconTest
-#   Rcon.cpp
-#   Rcon.h
-#   rconTest.cpp
-# )
-# target_link_libraries(rconTest PRIVATE ${RLS_LIBS})
-# target_link_options(rconTest PRIVATE "${RLS_LINK_OPTS}")
-
-# add_executable(updaterTest
-#   Config.cpp
-#   Config.h
-#   Downloader.cpp
-#   Downloader.h
-#   Updater.cpp
-#   Updater.h
-#   updaterTest.cpp
-# )
-# target_link_libraries(updaterTest PRIVATE ${RLS_LIBS})
-# target_link_options(updaterTest PRIVATE "${RLS_LINK_OPTS}")
+target_link_options(${RLS_SERVICE_TARGET} PRIVATE ${RLS_LINK_OPTS})
+add_custom_command(TARGET ${RLS_SERVICE_TARGET}
+  POST_BUILD
+  COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
+    ARGS "--strip-all" "$<TARGET_FILE:${RLS_SERVICE_TARGET}>"
+)
 
 include(GNUInstallDirs)
 # include(InstallRequiredSystemLibraries)
@@ -157,9 +177,17 @@ if(RLS_COPY_DEPS)
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
     COMMAND_EXPAND_LISTS
   )
+  add_custom_command(TARGET ${RLS_SERVICE_TARGET}
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${RLS_SERVICE_TARGET}> $<TARGET_FILE_DIR:${RLS_SERVICE_TARGET}>
+    COMMAND_EXPAND_LISTS
+  )
 endif()
 
-install(TARGETS ${PROJECT_NAME})
+install(TARGETS
+  ${PROJECT_NAME}
+  ${RLS_SERVICE_TARGET}
+)
 install(
   FILES exampleConfig.jsonc
   TYPE DATA

@@ -1,10 +1,10 @@
 #include "Downloader.h"
 
+#include "Logger.h"
 #include <algorithm>
 #include <cstddef>
 #include <curl/curl.h>
 #include <fstream>
-#include <iostream>
 #include <mutex>
 
 // NOTE: The Downloader initialization handle stuff in this file is an
@@ -22,31 +22,35 @@ namespace
 // Curl requires a C-style callback handler, so this function accumulates
 //  downloaded data into a file
 std::size_t WriteToFile(
-  char const* dataPtr, std::size_t size, std::size_t nmemb,
-  std::ofstream* filePtr
+  char const* dataPtr
+, std::size_t size
+, std::size_t nmemb
+, std::ofstream* filePtr
 )
 {
   if (!dataPtr || !filePtr)
   {
-    std::cout << "Null pointer(s) passed to Curl file write handler\n";
+    // LOG_WARNING(logger, "Null pointer(s) passed to Curl file write handler");
     return 0;
   }
   const std::size_t numBytes(size * nmemb);
   filePtr->write(dataPtr, numBytes);
-  // std::cout << "Wrote " << numBytes << " bytes to download file\n";
+  // LOG_INFO(logger, "Wrote " << numBytes << " bytes to download file");
   return numBytes;
 }
 
 // Curl requires a C-style callback handler, so this function accumulates
 //  downloaded data into a string
 std::size_t WriteToString(
-  char const* dataPtr, std::size_t size, std::size_t nmemb,
-  std::string* stringPtr
+  char const* dataPtr
+, std::size_t size
+, std::size_t nmemb
+, std::string* stringPtr
 )
 {
   if (!dataPtr || !stringPtr)
   {
-    std::cout << "Null pointer(s) passed to Curl string write handler\n";
+    // LOG_WARNING(logger, "Null pointer(s) passed to Curl string write handler");
     return 0;
   }
   const std::size_t numBytes(size * nmemb);
@@ -57,13 +61,15 @@ std::size_t WriteToString(
 // Curl requires a C-style callback handler, so this function accumulates
 //  downloaded data into a binary data buffer
 std::size_t WriteToVector(
-  char const* dataPtr, std::size_t size, std::size_t nmemb,
-  std::vector<char>* vPtr
+  char const* dataPtr
+, std::size_t size
+, std::size_t nmemb
+, std::vector<char>* vPtr
 )
 {
   if (!dataPtr || !vPtr)
   {
-    std::cout << "Null pointer(s) passed to Curl vector write handler\n";
+    // LOG_WARNING(logger, "Null pointer(s) passed to Curl vector write handler");
     return 0;
   }
   const std::size_t numBytes(size * nmemb);
@@ -74,7 +80,11 @@ std::size_t WriteToVector(
 
 namespace rustLaunchSite
 {
-Downloader::Downloader() = default;
+Downloader::Downloader(Logger& logger)
+  : initHandle_{GetInitHandle(logger)}
+  , logger_{logger}
+{
+}
 
 bool Downloader::GetUrlToFile(
   const std::filesystem::path& file,
@@ -86,13 +96,13 @@ bool Downloader::GetUrlToFile(
   );
   if (!outFile)
   {
-    std::cout << "WARNING: Failed to open output file for write: " << file;
+    LOG_WARNING(logger_, "Failed to open output file for write: " << file);
     return false;
   }
   auto* curlPtr(curl_easy_init());
   if (!curlPtr)
   {
-    std::cout << "WARNING: curl_easy_init() returned nullptr\n";
+    LOG_WARNING(logger_, "curl_easy_init() returned nullptr");
     outFile.close();
     std::filesystem::remove(file);
     return false;
@@ -112,7 +122,7 @@ bool Downloader::GetUrlToFile(
   outFile.close();
   if (curlCode != CURLE_OK)
   {
-    std::cout << "WARNING: Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "\n";
+    LOG_WARNING(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
     std::filesystem::remove(file);
     return false;
   }
@@ -125,7 +135,7 @@ std::string Downloader::GetUrlToString(std::string_view url) const
   auto* curlPtr(curl_easy_init());
   if (!curlPtr)
   {
-    std::cout << "WARNING: curl_easy_init() returned nullptr\n";
+    LOG_WARNING(logger_, "curl_easy_init() returned nullptr");
     return retVal;
   }
   CURLcode curlCode(CURLE_OK);
@@ -144,7 +154,7 @@ std::string Downloader::GetUrlToString(std::string_view url) const
   curl_easy_cleanup(curlPtr);
   if (curlCode != CURLE_OK)
   {
-    std::cout << "WARNING: Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "\n";
+    LOG_WARNING(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
     retVal.clear();
   }
   return retVal;
@@ -156,7 +166,7 @@ std::vector<char> Downloader::GetUrlToVector(std::string_view url) const
   auto* curlPtr(curl_easy_init());
   if (!curlPtr)
   {
-    std::cout << "WARNING: curl_easy_init() returned nullptr\n";
+    LOG_WARNING(logger_, "curl_easy_init() returned nullptr");
     return retVal;
   }
   CURLcode curlCode(CURLE_OK);
@@ -175,13 +185,13 @@ std::vector<char> Downloader::GetUrlToVector(std::string_view url) const
   curl_easy_cleanup(curlPtr);
   if (curlCode != CURLE_OK)
   {
-    std::cout << "WARNING: Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "\n";
+    LOG_WARNING(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
     retVal.clear();
   }
   return retVal;
 }
 
-Downloader::InitHandle Downloader::GetInitHandle()
+Downloader::InitHandle Downloader::GetInitHandle(Logger& logger)
 {
   // set up a mutex ASAP to ensure that weak pointer only ever references one
   //  shared pointer at a time
@@ -191,22 +201,24 @@ Downloader::InitHandle Downloader::GetInitHandle()
   static std::size_t handleNumber{0};
   static std::weak_ptr<std::size_t> handleWptr{};
 
-  // attempt to upgrade weak pointer to a shared pointer ASAP
-  auto existingHandleSptr{handleWptr.lock()};
-  // if we got a valid shared pointer, return it
-  if (existingHandleSptr) { return existingHandleSptr; }
+  // attempt to upgrade weak pointer to a shared pointer ASAP, and return one if
+  //  we get it
+  if (auto existingHandleSptr{handleWptr.lock()}; existingHandleSptr)
+  {
+    return existingHandleSptr;
+  }
 
   // shared pointer is invalid, so make a new one
   ++handleNumber;
-  std::cout << "Initializing downloader handle #" << handleNumber << std::endl;
+  LOG_INFO(logger, "Initializing downloader handle #" << handleNumber);
   curl_global_init(CURL_GLOBAL_ALL);
   // shared pointer points at our static handle count, but instead of managing
   //  its memory, the deleter performs a global libcurl cleanup action
-  InitHandle newHandleSptr
+  InitHandle newHandleSptr // NOSONAR
   {
-    &handleNumber, [](std::size_t const* hn)
+    &handleNumber, [&logger](std::size_t const* hn)
     {
-      std::cout << "Deinitializing downloader handle #" << *hn << std::endl;
+      LOG_INFO(logger, "Deinitializing downloader handle #" << *hn);
       curl_global_cleanup();
     }
   };

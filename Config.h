@@ -2,14 +2,17 @@
 #define CONFIG_H
 
 #include <filesystem>
+#include <format>
 #include <map>
-#include <optional>
-#include <sstream>
+#include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace rustLaunchSite
 {
+class Logger;
+
 /// @brief rustLaunchSite application configuration facility
 /// @details Abstracts use of config file parser to load config file data into
 ///  an instance of this class, which can then be queried for settings. Only
@@ -21,11 +24,12 @@ public:
   enum class ModFrameworkType { NONE, CARBON, OXIDE };
   static std::string ToString(const ModFrameworkType type)
   {
+    using enum ModFrameworkType;
     switch (type)
     {
-      case ModFrameworkType::NONE:   return "None";
-      case ModFrameworkType::CARBON: return "Carbon";
-      case ModFrameworkType::OXIDE:  return "Oxide";
+      case NONE:   return "None";
+      case CARBON: return "Carbon";
+      case OXIDE:  return "Oxide";
     }
     return "Unknown";
   }
@@ -34,48 +38,83 @@ public:
 
   struct Parameter
   {
-    std::optional<bool>        boolValue_;
-    std::optional<double>      doubleValue_;
-    std::optional<int>         intValue_;
-    std::optional<std::string> stringValue_;
+    const std::variant<bool, double, int, std::string> data_ = {};
 
-    explicit Parameter()                     : boolValue_(false) {}
-    explicit Parameter(const bool b)         : boolValue_(b)     {}
-    explicit Parameter(const double d)       : doubleValue_(d)   {}
-    explicit Parameter(const int i)          : intValue_(i)      {}
-    explicit Parameter(const std::string& s) : stringValue_(s)   {}
+    Parameter() = delete;
+    explicit Parameter(const bool         b) : data_(b) {}
+    explicit Parameter(const double       d) : data_(d) {}
+    explicit Parameter(const int          i) : data_(i) {}
+    explicit Parameter(const std::string& s) : data_(s) {}
+    explicit Parameter(std::string&&      s) : data_(std::move(s)) {}
 
-    Parameter(const Parameter& rhs) = default;
-
-    Parameter(Parameter&& rhs) noexcept
-      : boolValue_  (std::move(rhs.boolValue_))
-      , doubleValue_(std::move(rhs.doubleValue_))
-      , intValue_   (std::move(rhs.intValue_))
-      , stringValue_(std::move(rhs.stringValue_))
-    {
-    }
+    Parameter(const Parameter&) = default;
+    Parameter(Parameter&&) noexcept = default;
 
     ~Parameter() = default;
 
-    Parameter& operator= (const Parameter& rhs)
+    Parameter& operator= (const Parameter&) = delete;
+    Parameter& operator= (Parameter&&) = delete;
+
+    constexpr bool IsBool() const
     {
-      if (&rhs == this) return *this;
-      boolValue_   = rhs.boolValue_;
-      doubleValue_ = rhs.doubleValue_;
-      intValue_    = rhs.intValue_;
-      stringValue_ = rhs.stringValue_;
-      return *this;
+      return std::holds_alternative<bool>(data_);
     }
 
-    std::string ToString() const
+    constexpr bool IsDouble() const
     {
-      std::stringstream s;
-      if (boolValue_)   { s << *boolValue_;   return s.str(); }
-      if (doubleValue_) { s << *doubleValue_; return s.str(); }
-      if (intValue_)    { s << *intValue_;    return s.str(); }
-      // if (stringValue_) { return std::string("\"") + *stringValue_ + '\"'; }
-      if (stringValue_) { return *stringValue_; }
-      return "<UNKNOWN>";
+      return std::holds_alternative<double>(data_);
+    }
+
+    constexpr bool IsInt() const
+    {
+      return std::holds_alternative<int>(data_);
+    }
+
+    constexpr bool IsString() const
+    {
+      return std::holds_alternative<std::string>(data_);
+    }
+
+    constexpr bool GetBool() const
+    {
+      if (!IsBool())
+      {
+        throw std::runtime_error("Called Parameter::GetBool() on a non-bool");
+      }
+      return std::get<bool>(data_);
+    }
+
+    constexpr double GetDouble() const
+    {
+      if (!IsDouble())
+      {
+        throw std::runtime_error("Called Parameter::GetDouble() on a non-double");
+      }
+      return std::get<double>(data_);
+    }
+
+    constexpr int GetInt() const
+    {
+      if (!IsInt())
+      {
+        throw std::runtime_error("Called Parameter::GetInt() on a non-int");
+      }
+      return std::get<int>(data_);
+    }
+
+    constexpr std::string GetString() const
+    {
+      if (!IsString())
+      {
+        throw std::runtime_error("Called Parameter::GetString() on a non-string");
+      }
+      return std::get<std::string>(data_);
+    }
+
+    constexpr std::string ToString() const
+    {
+      return std::visit(
+        [](const auto& arg) { return std::format("{}", arg); }, data_);
     }
   };
 
@@ -86,7 +125,7 @@ public:
   ///  specified config file.
   /// @param configFile Configuration file to load
   /// @throw @c std::invalid_argument on parse or validation failure
-  explicit Config(std::filesystem::path configFile);
+  explicit Config(Logger& logger, std::filesystem::path configFile);
 
   // accessor methods for loaded settings
 
@@ -188,6 +227,10 @@ private:
 
   ParameterMapType minusParams_ = {};
   ParameterMapType plusParams_ = {};
+
+  // logger
+
+  Logger& logger_;
 
   // disabled constructors/operators
 

@@ -10,6 +10,8 @@
 namespace rustLaunchSite
 {
   // forward declarations
+
+  class Logger;
   struct DownloaderInitHandle;
 
   /// @brief URL download facility
@@ -27,7 +29,7 @@ namespace rustLaunchSite
       /// @brief Primary constructor
       /// @details Performs global init of underlying API if needed, which is
       ///  the only state managed by this class.
-      Downloader();
+      explicit Downloader(Logger& logger);
 
       /// @brief Download specified URL contents to a file
       /// @details The file will be truncated prior to download attempt.
@@ -53,12 +55,15 @@ namespace rustLaunchSite
 
       // disabled constructors/operators
 
+      Downloader() = delete;
       Downloader(const Downloader&) = delete;
       Downloader& operator= (const Downloader&) = delete;
 
       using InitHandle = std::shared_ptr<std::size_t>;
-      static InitHandle GetInitHandle();
-      InitHandle initHandle_{GetInitHandle()};
+      static InitHandle GetInitHandle(Logger& logger);
+      InitHandle initHandle_;
+
+      Logger& logger_;
   };
 }
 

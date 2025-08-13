@@ -1,14 +1,14 @@
 #include "Server.h"
 
 #include "Config.h"
+#include "Logger.h"
 #include "Rcon.h"
 
 #if _MSC_VER
   // make Boost happy when building with MSVC
-  #include <SDKDDKVer.h>
+  #include <sdkddkver.h>
 #endif
 
-// #include <boost/winapi/show_window.hpp>
 #include <boost/process/v1/args.hpp>
 #include <boost/process/v1/child.hpp>
 #include <boost/process/v1/exe.hpp>
@@ -23,7 +23,6 @@
   #include <csignal>
 #endif
 #include <chrono>
-#include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <system_error>
@@ -31,16 +30,6 @@
 
 namespace
 {
-// wrap a string in double-quotes if it contains spaces
-inline std::string QuoteString(const std::string& s)
-{
-  return (
-    // s.find(" ") == std::string::npos ?
-      s //:
-      // std::string("\"") + s + '\"'
-  );
-}
-
 #if _MSC_VER || defined(__MINGW32__)
 // boost::process extension to launch a process in a new console window
 // idea from https://stackoverflow.com/a/69774875/3171290 and
@@ -61,8 +50,6 @@ struct WindowsCreationFlags : boost::process::v1::extend::handler
     boost::process::v1::extend::windows_executor<Char, Sequence> & ex)
   {
     ex.creation_flags |= flags_;
-    // std::cout << "Modified Windows process creation flags: " << ex.creation_flags << std::endl;
-    // std::cout << "Modified Windows handle inheritance: " << ex.inherit_handles << std::endl;
   }
 };
 #endif
@@ -79,6 +66,15 @@ std::filesystem::path GetRustDedicatedPath(
       "carbon.sh" : "runds.sh");
 #endif
 }
+
+constexpr std::chrono::seconds GetMarkIntervalSeconds(
+  const std::chrono::seconds& remainingSeconds)
+{
+  if (remainingSeconds.count() > 300) return std::chrono::seconds{300};
+  if (remainingSeconds.count() >  60) return std::chrono::seconds{ 60};
+  if (remainingSeconds.count() >  10) return std::chrono::seconds{ 10};
+  return                                     std::chrono::seconds{  1};
+}
 }
 
 namespace rustLaunchSite
@@ -91,14 +87,19 @@ struct ProcessImpl
 #endif
 };
 
-Server::Server(std::shared_ptr<const Config> cfgSptr)
-  : rconUptr_(std::make_unique<Rcon>(
-      cfgSptr->GetRconIP(), cfgSptr->GetRconPort(), cfgSptr->GetRconPassword(),
-      cfgSptr->GetRconLog()
-    ))
-  , rustDedicatedPath_(GetRustDedicatedPath(cfgSptr))
-  , stopDelaySeconds_(cfgSptr->GetProcessShutdownDelaySeconds())
-  , workingDirectory_(cfgSptr->GetInstallPath())
+Server::Server(Logger& logger, std::shared_ptr<const Config> cfgSptr)
+  : rconUptr_{std::make_unique<Rcon>(
+      logger
+    , cfgSptr->GetRconIP()
+    , cfgSptr->GetRconPort()
+    , cfgSptr->GetRconPassword()
+    , cfgSptr->GetRconLog()
+    )}
+  , rustDedicatedPath_{GetRustDedicatedPath(cfgSptr)}
+  , stopDelaySeconds_{
+      static_cast<std::size_t>(cfgSptr->GetProcessShutdownDelaySeconds())}
+  , workingDirectory_{cfgSptr->GetInstallPath()}
+  , logger_{logger}
 {
   // do this here, or else Sonar badgers me to use in-class initializers, which
   //  won't work with opaque types
@@ -129,22 +130,22 @@ Server::Server(std::shared_ptr<const Config> cfgSptr)
   //  "minus" parameters
   for (const auto& [mParamName, mParamData] : cfgSptr->GetMinusParams())
   {
-    const bool isBool(mParamData.boolValue_);
+    const auto isBool(mParamData.IsBool());
     // if this a boolean set to false, skip it
-    if (isBool && !*mParamData.boolValue_) { continue; }
+    if (isBool && !mParamData.GetBool()) { continue; }
     // push parameter name (prefix is already prepended)
-    rustDedicatedArguments_.push_back(QuoteString(mParamName));
+    rustDedicatedArguments_.push_back(mParamName);
     // if it's a boolean, skip the parameter value
     if (isBool) { continue; }
     // push value
-    rustDedicatedArguments_.push_back(QuoteString(mParamData.ToString()));
+    rustDedicatedArguments_.push_back(mParamData.ToString());
   }
   //  "plus" parameters
   for (const auto& [pParamName, pParamData] : cfgSptr->GetPlusParams())
   {
-    const bool isBool(pParamData.boolValue_);
+    const bool isBool(pParamData.IsBool());
     // if this a boolean set to false, skip it
-    if (isBool && !*pParamData.boolValue_) { continue; }
+    if (isBool && !pParamData.GetBool()) { continue; }
     // check for parameter names whose values may be overridden by
     //  rustLaunchSite configuration
     if (
@@ -156,52 +157,53 @@ Server::Server(std::shared_ptr<const Config> cfgSptr)
       pParamName == "+server.seed"
     )
     {
-      std::cout << "WARNING: Ignoring configured launch parameter `" << pParamName << "` because it's value will be determined automatically by rustLaunchSite" << std::endl;
+      LOG_WARNING(logger_, "Ignoring configured launch parameter `" << pParamName << "` because it's value will be determined automatically by rustLaunchSite");
       continue;
     }
     // push parameter name (prefix is already prepended)
-    rustDedicatedArguments_.push_back(QuoteString(pParamName));
+    rustDedicatedArguments_.push_back(pParamName);
     // if it's a boolean, skip the parameter value
     if (isBool) { continue; }
     // push value
-    rustDedicatedArguments_.push_back(QuoteString(pParamData.ToString()));
+    rustDedicatedArguments_.push_back(pParamData.ToString());
   }
   // now set automatically-determined parameters
   rustDedicatedArguments_.emplace_back("+rcon.password");
-  rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetRconPassword()));
+  rustDedicatedArguments_.push_back(cfgSptr->GetRconPassword());
   if (cfgSptr->GetRconPassthroughIP())
   {
     rustDedicatedArguments_.emplace_back("+rcon.ip");
-    rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetRconIP()));
+    rustDedicatedArguments_.push_back(cfgSptr->GetRconIP());
   }
   if (cfgSptr->GetRconPassthroughPort())
   {
     rustDedicatedArguments_.emplace_back("+rcon.port");
     std::stringstream s;
     s << cfgSptr->GetRconPort();
-    rustDedicatedArguments_.push_back(QuoteString(s.str()));
+    rustDedicatedArguments_.push_back(s.str());
   }
   rustDedicatedArguments_.emplace_back("+rcon.web");
   rustDedicatedArguments_.emplace_back("1");
   rustDedicatedArguments_.emplace_back("+server.identity");
-  rustDedicatedArguments_.push_back(QuoteString(cfgSptr->GetInstallIdentity()));
+  rustDedicatedArguments_.push_back(cfgSptr->GetInstallIdentity());
   // seed is a bit complicated
   // TODO: ...and this isn't even the final logic needed!
   rustDedicatedArguments_.emplace_back("+server.seed");
   int seed(1);
+  using enum rustLaunchSite::Config::SeedStrategy;
   switch (cfgSptr->GetSeedStrategy())
   {
-    case Config::SeedStrategy::FIXED:
+    case FIXED:
     {
       seed = cfgSptr->GetSeedFixed();
     }
     break;
-    case Config::SeedStrategy::LIST:
+    case LIST:
     {
       seed = cfgSptr->GetSeedList().at(0);
     }
     break;
-    case Config::SeedStrategy::RANDOM:
+    case RANDOM:
     {
       seed = 1;
     }
@@ -222,7 +224,7 @@ Server::~Server()
     }
     catch (const std::exception& e)
     {
-      std::cout << "WARNING: Caught exception while stopping server: " << e.what() << std::endl;
+      LOG_WARNING(logger_, "Caught exception while stopping server: " << e.what());
     }
   }
 }
@@ -273,8 +275,7 @@ Server::Info Server::GetInfo()
   }
   catch (const nlohmann::json::exception& e)
   {
-    std::cout << "ERROR: Error parsing RCON serverinfo response as JSON: " << e.what()
-              << "\nResponse contents: " << serverInfo << std::endl;
+    LOG_WARNING(logger_, "Error parsing RCON serverinfo response as JSON: " << e.what() << "\nResponse contents: " << serverInfo);
     retVal.valid_ = false;
   }
   return retVal;
@@ -285,7 +286,7 @@ bool Server::IsRunning() const
   // we should always have an impl pointer
   if (!processImplUptr_)
   {
-    std::cout << "ERROR: Invalid ProcessImpl pointer" << std::endl;
+    LOG_WARNING(logger_, "Invalid ProcessImpl pointer");
     return false;
   }
   // if we don't have a process pointer, we're not running
@@ -295,7 +296,7 @@ bool Server::IsRunning() const
   //  tiny-process-library, or is boost::process smarter?
   auto& process{*(processImplUptr_->processUptr_)};
   std::error_code errorCode{};
-  return (process.running(errorCode));
+  return process.running(errorCode);
 }
 
 std::string Server::SendRconCommand(
@@ -304,12 +305,12 @@ std::string Server::SendRconCommand(
 {
   if (!IsRunning())
   {
-    std::cout << "ERROR: Can't send RCON command due to server not running" << std::endl;
+    LOG_WARNING(logger_, "Can't send RCON command due to server not running");
     return std::string();
   }
   if (!rconUptr_)
   {
-    std::cout << "ERROR: Failed to send RCON command due to RCON not available/connected" << std::endl;
+    LOG_WARNING(logger_, "Failed to send RCON command due to RCON not available/connected");
     return std::string();
   }
   return rconUptr_->SendCommand(command, waitForResponse ? 10000 : 0);
@@ -319,18 +320,18 @@ bool Server::Start()
 {
   if (IsRunning())
   {
-    std::cout << "WARNING: Can't start server because it's already running" << std::endl;
+    LOG_WARNING(logger_, "Can't start server because it's already running");
     return true;
   }
   if (!processImplUptr_)
   {
-    std::cout << "WARNING: ProcessImpl pointer is invalid" << std::endl;
+    LOG_WARNING(logger_, "ProcessImpl pointer is invalid");
     return false;
   }
   if (processImplUptr_->processUptr_)
   {
     // don't warn since this happens in the case of an unexpected restart
-    // std::cout << "WARNING: Resetting defunct server process handle" << std::endl;
+    // LOG_WARNING(logger_, "Resetting defunct server process handle");
     processImplUptr_->processUptr_.reset();
   }
   std::error_code errorCode{};
@@ -359,27 +360,27 @@ bool Server::Start()
   );
   if (!processImplUptr_->processUptr_)
   {
-    std::cout << "ERROR: Failed to create server process handle" << std::endl;
+    LOG_WARNING(logger_, "Failed to create server process handle");
     return false;
   }
   if (errorCode)
   {
-    std::cout << "ERROR: Error creating server process: " << errorCode.message() << std::endl;
+    LOG_WARNING(logger_, "Error creating server process: " << errorCode.message());
     processImplUptr_->processUptr_.reset();
     return false;
   }
   for (std::size_t i(0); i < 10 && !IsRunning(); ++i)
   {
-    std::cout << "WARNING: Server not running - waiting..." << std::endl;
+    LOG_WARNING(logger_, "Server not running - waiting...");
     std::this_thread::sleep_for(std::chrono::seconds(2));
   }
   if (!IsRunning())
   {
-    std::cout << "ERROR: Server failed to launch" << std::endl;
+    LOG_WARNING(logger_, "Server failed to launch");
     processImplUptr_->processUptr_.reset();
     return false;
   }
-  std::cout << "Server launched successfully" << std::endl;
+  LOG_INFO(logger_, "Server launched successfully");
   return true;
 }
 
@@ -387,13 +388,13 @@ void Server::Stop(const std::string& reason)
 {
   if (!IsRunning())
   {
-    // std::cout << "WARNING: Can't stop server because it's not running" << std::endl;
+    // LOG_WARNING(logger_, "Can't stop server because it's not running");
     return;
   }
-  std::cout << "Stop(): Stopping server for reason: " << reason << std::endl;
+  LOG_INFO(logger_, "Stop(): Stopping server for reason: " << reason);
   if (!processImplUptr_ || !processImplUptr_->processUptr_)
   {
-    std::cout << "ERROR: Process handle/impl pointer is null" << std::endl;
+    LOG_WARNING(logger_, "Process handle/impl pointer is null");
     return;
   }
   auto& process(*processImplUptr_->processUptr_);
@@ -403,17 +404,17 @@ void Server::Stop(const std::string& reason)
     // delay shutdown if/as appropriate
     StopDelay(reason);
     // send RCON quit command and wait for some amount of time for shutdown
-    std::cout << "Commanding server quit via RCON" << std::endl;
+    LOG_INFO(logger_, "Commanding server quit via RCON");
     SendRconCommand("quit", true);
     for (std::size_t i(0); i < 10 && IsRunning(); ++i)
     {
-      std::cout << "Waiting for server to quit..." << std::endl;
+      LOG_INFO(logger_, "Waiting for server to quit...");
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
   }
   else
   {
-    std::cout << "WARNING: RCON is not available; cannot issue shutdown commands" << std::endl;
+    LOG_WARNING(logger_, "RCON is not available; cannot issue shutdown commands");
   }
   std::error_code errorCode;
 #if !_MSC_VER && !defined(__MINGW32__)
@@ -421,32 +422,32 @@ void Server::Stop(const std::string& reason)
   //  shutdown than the SIGKILL sent by terminate()
   if (IsRunning())
   {
-    std::cout << "WARNING: Server still running; interrupting process" << std::endl;
+    LOG_WARNING(logger_, "Server still running; interrupting process");
     if (-1 == kill(processImplUptr_->processUptr_->id(), SIGINT))
     {
-      std::cout << "WARNING: POSIX kill(SIGINT) returned error code: " << strerror(errno) << std::endl;
+      LOG_WARNING(logger_, "POSIX kill(SIGINT) returned error code: " << strerror(errno));
     }
     // interrupt shutdown isn't instantaneous, so allow for another wait cycle
     for (std::size_t i(0); i < 10 && IsRunning(); ++i)
     {
-      std::cout << "Waiting for server to terminate..." << std::endl;
+      LOG_INFO(logger_, "Waiting for server to terminate...");
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
   }
 #endif
   if (IsRunning())
   {
-    std::cout << "WARNING: Server still running; killing process" << std::endl;
+    LOG_WARNING(logger_, "Server still running; killing process");
     process.terminate(errorCode);
   }
   if (errorCode)
   {
-    std::cout << "WARNING: Process library returned error code: " << errorCode.message() << std::endl;
+    LOG_WARNING(logger_, "Process library returned error code: " << errorCode.message());
   }
 
   if (const auto exitCode(process.exit_code()); exitCode)
   {
-    std::cout << "WARNING: Server process returned nonzero exit code: " << exitCode << std::endl;
+    LOG_WARNING(logger_, "Server process returned nonzero exit code: " << exitCode);
   }
   // dump the pointer, since we can't re-launch the process at this point
   // NOTE: this invalidates local reference `process`
@@ -457,11 +458,11 @@ void Server::StopDelay(std::string_view reason)
 {
   if (!stopDelaySeconds_)
   {
-    std::cout << "Skipping shutdown delay checks" << std::endl;
+    LOG_INFO(logger_, "Skipping shutdown delay checks");
     return;
   }
 
-  std::cout << "Performing shutdown delay checks" << std::endl;
+  LOG_INFO(logger_, "Performing shutdown delay checks");
   // latest possible shutdown time
   const std::chrono::steady_clock::time_point shutdownTime(
     std::chrono::steady_clock::now() +
@@ -482,12 +483,8 @@ void Server::StopDelay(std::string_view reason)
       )
     );
     // how often notifications are occurring based on time left
-    const std::chrono::seconds markIntervalSeconds(
-      remainingTimeSeconds.count() > 300 ? 300 :
-      remainingTimeSeconds.count() >  60 ?  60 :
-      remainingTimeSeconds.count() >  10 ?  10 :
-                                      1
-    );
+    const auto& markIntervalSeconds(
+      GetMarkIntervalSeconds(remainingTimeSeconds));
     // number of seconds until next notification
     const auto marksRemaining(
       remainingTimeSeconds / markIntervalSeconds
@@ -504,9 +501,7 @@ void Server::StopDelay(std::string_view reason)
     // fudge the count by one second so that it looks nicer
     std::stringstream s;
     s << remainingTimeSeconds.count() + 1;
-    std::cout
-      << serverInfo.players_ << " player(s) online; delaying shutdown by up to "
-      << s.str() << " second(s)" << std::endl;
+    LOG_INFO(logger_, serverInfo.players_ << " player(s) online; delaying shutdown by up to " << s.str() << " second(s)");
     std::string sayString("say *** Shutdown in ");
     sayString.append(s.str()).append(" second(s)");
     if (!reason.empty())
@@ -516,10 +511,7 @@ void Server::StopDelay(std::string_view reason)
     // don't wait for response, as it comes in with id=-1
     SendRconCommand(sayString, false);
     // sleep until next mark
-    std::cout
-      << "Sleeping from " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count()
-      << " until " << std::chrono::duration_cast<std::chrono::seconds>(nextMarkTime.time_since_epoch()).count()
-      << "; latest shutdown at " << std::chrono::duration_cast<std::chrono::seconds>(shutdownTime.time_since_epoch()).count() << std::endl;
+    LOG_INFO(logger_, "Sleeping from " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << " until " << std::chrono::duration_cast<std::chrono::seconds>(nextMarkTime.time_since_epoch()).count() << "; latest shutdown at " << std::chrono::duration_cast<std::chrono::seconds>(shutdownTime.time_since_epoch()).count());
     std::this_thread::sleep_until(nextMarkTime);
   }
 }
