@@ -5,19 +5,6 @@
 
 namespace
 {
-/// CtrlCLibrary callback handler
-///
-/// This is mainly just a shunt to RLS Stop()
-bool HandleCtrlC(CtrlCLibrary::CtrlSignal s)
-{
-  if (s != CtrlCLibrary::kCtrlCSignal)
-  {
-    return false;
-  }
-  rustLaunchSite::Stop();
-  return true;
-}
-
 /// Alias CtrlCLibrary's handle ID type here, to reduce maintenance burden in
 ///  the case that it ever changes
 using CtrlCHandleT = unsigned int;
@@ -37,7 +24,13 @@ std::unique_ptr<CtrlCHandleT, decltype(DeleteCtrlCHandle)> MakeCtrlCHandle()
 {
   return
   { // NOSONAR
-    new CtrlCHandleT{CtrlCLibrary::SetCtrlCHandler(HandleCtrlC)},
+    new CtrlCHandleT{CtrlCLibrary::SetCtrlCHandler(
+      [](CtrlCLibrary::CtrlSignal s)
+      {
+        if (s != CtrlCLibrary::kCtrlCSignal) return false;
+        rustLaunchSite::Stop();
+        return true;
+      })},
     DeleteCtrlCHandle
   };
 }
@@ -51,8 +44,8 @@ int main(int argc, char *argv[])
   rustLaunchSite::Logger logger{};
 
   // attempt to install Ctrl+C handler
-  if (
-    auto ctrlCHandle{MakeCtrlCHandle()}; CtrlCLibrary::kErrorID == *ctrlCHandle)
+  auto ctrlCHandle{MakeCtrlCHandle()}; // NOSONAR this needs to live
+  if (CtrlCLibrary::kErrorID == *ctrlCHandle)
   {
     LOG_ERROR(logger, "Failed to install Ctrl+C handler");
     return rustLaunchSite::RLS_EXIT_HANDLER;

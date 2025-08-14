@@ -5,6 +5,7 @@
 #include "Server.h"
 #include "Updater.h"
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
@@ -22,7 +23,7 @@ enum class TimerState
   PAUSE,  // timer thread should sleep until ordered to run or stop
   STOP    // timer thread should exit
 };
-// mutex and mutex-controlled thread data
+// mutex, mutex-controlled, and atomic thread data
 namespace threadData
 {
 // mutex that controls access to sibling variables
@@ -34,7 +35,7 @@ std::condition_variable cvTimer_;
 // timer thread state commanded by main()
 TimerState timerState_{TimerState::RUN};
 // whether Stop() handler is notifying main() to shut down
-bool notifyMainStop_{false};
+std::atomic_flag notifyMainStop_ = ATOMIC_FLAG_INIT;
 // whether timer thread is notifying main() to check server health
 bool notifyMainServer_{false};
 // whether timer thread is notifying main() to check for updates
@@ -372,14 +373,14 @@ int Start(Logger& logger, int argc, char* argv[])
         lock,
         [](){
           return (
-            threadData::notifyMainStop_ ||
+            threadData::notifyMainStop_.test() ||
             threadData::notifyMainServer_ ||
             threadData::notifyMainUpdater_
           );
         }
       );
       // handle Stop() notification
-      if (threadData::notifyMainStop_)
+      if (threadData::notifyMainStop_.test())
       {
         // attempt an orderly shutdown
         LOG_INFO(logger, "Server manager stop requested; stopping server");
@@ -561,8 +562,7 @@ int Start(Logger& logger, int argc, char* argv[])
 void Stop()
 {
   // attempt to signal main()
-  std::unique_lock lock{threadData::mutex_};
-  threadData::notifyMainStop_ = true;
+  threadData::notifyMainStop_.test_and_set();
   threadData::cvMain_.notify_all();
 }
 }

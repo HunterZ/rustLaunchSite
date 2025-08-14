@@ -5,6 +5,9 @@ project(rustLaunchSite
   VERSION 0.0.1
 )
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # Sonar is too stupid to ignore missing .modmap files, and we don't need them
 #  in this project anyway, so tell CMake not to generate them
 set(CMAKE_CXX_SCAN_FOR_MODULES 0)
@@ -60,11 +63,11 @@ else()
   # normal case: clone the dependencies from github
   message("RLS: Assuming github dependencies need to be cloned")
   FetchContent_Declare(ctrl-c
-    GIT_REPOSITORY git@github.com:HunterZ/ctrl-c.git
+    GIT_REPOSITORY https://github.com/HunterZ/ctrl-c.git
     GIT_TAG        master
   )
   FetchContent_Declare(SrvLib
-    GIT_REPOSITORY git@github.com:HunterZ/SrvLib.git
+    GIT_REPOSITORY https://github.com/HunterZ/SrvLib.git
     GIT_TAG        master
   )
 endif()

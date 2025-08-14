@@ -88,6 +88,7 @@ private:
   bool doFlush_ = false;
   bool stopFlush_ = false;
   std::thread flushThread_;
+  static std::stringstream* s_; // make clangd stop complaining about <sstream>
 };
 
 /// @brief Logging macro for use by @c LOG_INFO / @c LOG_WARNING / @c LOG_ERROR
