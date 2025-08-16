@@ -208,20 +208,20 @@ install(
 if(NOT WIN32)
   install(
     FILES
-      "examples/config/systemd/rlsDailyRestart.service"
-      "examples/config/systemd/rlsDailyRestart.timer"
-      "examples/config/systemd/rustLaunchSite.service"
+      "examples/systemd/rlsDailyRestart.service"
+      "examples/systemd/rlsDailyRestart.timer"
+      "examples/systemd/rustLaunchSite.service"
     DESTINATION .
   )
   install(
     FILES
-      "examples/config/systemd/README.md"
+      "examples/systemd/README.md"
     DESTINATION .
     RENAME "README.service.md"
   )
   install(
     PROGRAMS
-      "examples/config/systemd/rlsDailyRestart.sh"
+      "examples/systemd/rlsDailyRestart.sh"
     DESTINATION .
   )
 endif()
