@@ -1,0 +1,15 @@
+# this will run the rlsDailyRestart.service one-shot service daily at the
+#  designated time
+
+[Unit]
+Description=rustLaunchSite daily restart
+
+[Timer]
+# restart every day at 2:00 AM
+OnCalendar=02:00:00
+# test restarting every 5 minutes
+#OnUnitActiveSec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

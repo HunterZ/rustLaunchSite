@@ -1,0 +1,42 @@
+# main systemd service config for rustLaunchSite application
+
+[Unit]
+Description=rustLaunchSite
+Documentation=https://github.com/HunterZ/rustLaunchSite
+Wants=network-online.target
+After=syslog.target network.target network-online.target
+
+[Service]
+Type=forking
+PIDFile=/run/rustLaunchSite/rustLaunchSite.pid
+ExecStart=/opt/rustLaunchSite/rustLaunchSited
+ExecReload=/opt/rustLaunchSite/rustLaunchSited -k
+ExecStop=/opt/rustLaunchSite/rustLaunchSited -e
+# this should be a bit longer than the shutdown delay RLS uses when players are
+#  online, to give things a chance to cleanly stop if needed
+TimeoutStopSec=330
+WorkingDirectory=/opt/rustLaunchSite
+# run as a `rust` user instead of `root`
+User=rust
+Group=rust
+# default to slightly higher than default priority, to make it less likely that
+#  a regular system process will affect server FPS
+Nice=-1
+# tell systemd to manage a /run/rustLaunchSite directory for PID file to live in
+# also sets RUNTIME_DIRECTORY environment variable, so that rustLaunchSite knows
+#  where to manage the PID file
+RuntimeDirectory=rustLaunchSite
+# TODO: consider ConfigurationDirectory, which manages a directory under /etc
+#  and sets CONFIGURATION_DIRECTORY env var
+# TODO: consider LogsDirectory, which manages a directory under /var/log and
+#  sets LOGS_DIRECTORY env var
+# PATH needs to make monodis and steamcmd available if paths are not specified
+#  in the RLS config file
+Environment="PATH=usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games"
+# This can be used to specify a non-default rustLaunchSite config file
+#Environment="RLS_CONFIG_PATH=/path/to/config.jsonc"
+# tell systemd to send SIGTERM first if processes remain after ExecStop exits
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+# systemd service for performing an RLS daily restart
+
+[Unit]
+Description=rustLaunchSite service restarter
+
+[Service]
+Type=oneshot
+# to prevent reason file creation, only run if RLS is running
+ExecCondition=systemctl is-active -q rustLaunchSite.service
+ExecStart=/opt/rustLaunchSite/rlsDailyRestart.sh
+WorkingDirectory=/opt/rustLaunchSite
+# TODO: I get errors running as non-root for some reason
+#User=rust
+#Group=rust
+
+[Install]
+WantedBy=multi-user.target

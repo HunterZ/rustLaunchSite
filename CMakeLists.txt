@@ -149,7 +149,7 @@ add_custom_command(TARGET ${RLS_SERVICE_TARGET}
     ARGS "--strip-all" "$<TARGET_FILE:${RLS_SERVICE_TARGET}>"
 )
 
-include(GNUInstallDirs)
+# include(GNUInstallDirs)
 # include(InstallRequiredSystemLibraries)
 
 # install(CODE [[
@@ -190,15 +190,41 @@ endif()
 install(TARGETS
   ${PROJECT_NAME}
   ${RLS_SERVICE_TARGET}
+  DESTINATION .
 )
 install(
-  FILES exampleConfig.jsonc
-  TYPE DATA
+  FILES
+    "LICENSE"
+    "README.md"
+  # TYPE DOC
+  DESTINATION .
 )
 install(
-  FILES LICENSE README.md
-  TYPE DOC
+  FILES
+    "examples/config/exampleConfig.jsonc"
+  # TYPE DATA
+  DESTINATION .
 )
+if(NOT WIN32)
+  install(
+    FILES
+      "examples/config/systemd/rlsDailyRestart.service"
+      "examples/config/systemd/rlsDailyRestart.timer"
+      "examples/config/systemd/rustLaunchSite.service"
+    DESTINATION .
+  )
+  install(
+    FILES
+      "examples/config/systemd/README.md"
+    DESTINATION .
+    RENAME "README.service.md"
+  )
+  install(
+    PROGRAMS
+      "examples/config/systemd/rlsDailyRestart.sh"
+    DESTINATION .
+  )
+endif()
 
 # generate a fake build ID if we weren't given one by the environment (e.g. from a CI/CD workflow/pipeline)
 if(NOT DEFINED BUILD_ID)
