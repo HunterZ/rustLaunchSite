@@ -5,41 +5,133 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
-#include <ostream>
 #include <sstream>
 #include <thread>
 
+// enable POSIX syslog support if available
+#if __has_include(<syslog.h>)
+  #define RLS_SYSLOG
+#endif
+
 namespace rustLaunchSite
 {
+/// @brief Logging levels
+enum class LogLevel { INF = 0, WRN = 1, ERR = 2 };
+
+/// @brief Pure virtual interface class for a logging sink
+class LogSinkI
+{
+public:
+
+  virtual bool CanWrite() const = 0;
+
+  virtual void Write(
+    std::string_view message,
+    std::string_view file,
+    const std::size_t line,
+    const LogLevel level = LogLevel::INF
+  ) = 0;
+
+  virtual void Flush() {};
+};
+
+/// @brief Pure virtual interface class for a flushable log object
+class LogFlushI
+{
+public:
+
+  virtual void Flush() = 0;
+};
+
+/// @brief Implementation of LogSink that logs to @c std::out (stdout)
+class LogSinkStdout : public LogSinkI, public LogFlushI
+{
+public:
+
+  bool CanWrite() const override;
+
+  void Write(
+    std::string_view message,
+    std::string_view file,
+    const std::size_t line,
+    const LogLevel level = LogLevel::INF
+  ) override;
+
+  void Flush() override;
+};
+
+/// @brief Implementation of LogSink that logs to a file
+class LogSinkFile : public LogSinkI, public LogFlushI
+{
+public:
+
+  /// @brief Create a log sink that writes to the specified file
+  /// @details Output file will be truncated on open.
+  /// @param outputFile File/path to which this sink should write
+  /// @throws @c std::runtime_error if specified @c outputFile cannot be opened
+  ///  for writing
+  explicit LogSinkFile(const std::filesystem::path& outputFile);
+
+  bool CanWrite() const override;
+
+  void Write(
+    std::string_view message,
+    std::string_view file,
+    const std::size_t line,
+    const LogLevel level = LogLevel::INF
+  ) override;
+
+  void Flush() override;
+
+private:
+
+  std::ofstream fileStream_;
+};
+
+#ifdef RLS_SYSLOG
+/// @brief Implementation of LogSink that logs to a POSIX syslog
+class LogSinkSyslog : public LogSinkI
+{
+public:
+
+  bool CanWrite() const override;
+
+  void Write(
+    std::string_view message,
+    std::string_view file,
+    const std::size_t line,
+    const LogLevel level = LogLevel::INF
+  ) override;
+};
+#endif
+
 /// @brief rustLaunchSite logging facility
 ///
-/// @details Implements the ability to log messages to a file or stdout. Logging
-///  output must be specified at time of construction.
+/// @details Implements the ability to log messages to a file, stdout, or (POSIX
+///  only) syslog.
+///
+/// Logging sink must be provided at time of construction. Using the same
+///  logging sink with two @c Logger instances is unsupported, and may result in
+///  undefined behavior.
+///
+/// If the chosen sink supports I/O flushing, this will be performed once every
+///  5 seconds as a compromise between performance and usability/reliability.
 class Logger
 {
 public:
 
-  /// @brief Logging levels
-  enum class Level { INF = 0, WRN = 1, ERR = 2 };
-
   /// @brief Constructor
   ///
-  /// @details Logs to @c std::cout if no path specified. If specified path
-  ///  already exists, it will be overwritten.
-  ///
-  /// @param outputFile Optional path to which logs should be written
-  ///
-  /// @throws @c std::runtime_error if specified @c outputFile cannot be opened
-  ///  for writing
-  explicit Logger(const std::filesystem::path& outputFile = {});
+  /// @param logSink Endpoint to which log messages should be written
+  explicit Logger(std::shared_ptr<LogSinkI> logSink);
 
   /// @brief Destructor
   ~Logger();
 
   /// @brief Log an error message
   ///
-  /// @details @c level values greater than @c LOG_ERROR will be treated as
-  ///  @c LOG_ERROR.
+  /// @details @c level values greater than @c LOGERR will be treated as
+  ///  @c LOGERR.
   ///
   /// This method is thread safe.
   ///
@@ -51,28 +143,29 @@ public:
     std::string_view message,
     std::string_view file,
     const std::size_t line,
-    const Level level = Level::INF
+    const LogLevel level = LogLevel::INF
   );
 
+  /// @brief Trim the given path, leaving only the filename
+  /// @details Finds and returns start of filename. Constexpr for macro use.
+  /// @param path Path to trim
+  /// @return Pointer to start of filename
   static constexpr auto* TrimFile(const char* const path)
   {
-      const auto* startPosition(path);
-      for (const auto* currentCharacter(path)
-            ; *currentCharacter != '\0'
-            ; ++currentCharacter)
+    const auto* startPosition(path);
+    for (const auto* currentCharacter(path)
+          ; *currentCharacter != '\0'
+          ; ++currentCharacter)
+    {
+      if (*currentCharacter == '\\' || *currentCharacter == '/')
       {
-        if (*currentCharacter == '\\' || *currentCharacter == '/')
-        {
-          startPosition = currentCharacter;
-        }
+        startPosition = currentCharacter;
       }
+    }
 
-      if (startPosition != path)
-      {
-        ++startPosition;
-      }
+    if (startPosition != path) ++startPosition;
 
-      return startPosition;
+    return startPosition;
   }
 
 private:
@@ -82,16 +175,16 @@ private:
 
   void FlushLoop();
 
-  std::unique_ptr<std::ofstream> fileUptr_ = nullptr;
-  std::recursive_mutex mutex_ = {};
-  std::ostream& outStream_;
+  std::shared_ptr<LogSinkI> logSink_ = nullptr;
+  std::recursive_mutex mutex_;
+  bool hasFlush_ = false;
   bool doFlush_ = false;
   bool stopFlush_ = false;
   std::thread flushThread_;
-  static std::stringstream* s_; // make clangd stop complaining about <sstream>
+  static std::stringstream* shutUpLintersTheMacroNeedsSstreamHeader_;
 };
 
-/// @brief Logging macro for use by @c LOG_INFO / @c LOG_WARNING / @c LOG_ERROR
+/// @brief Logging macro for use by @c LOGINF / @c LOGWRN / @c LOGERR
 #define LOG(logger, level, message) \
 { \
   std::stringstream __temp_log_stream__; __temp_log_stream__ << message; \
@@ -107,13 +200,13 @@ private:
 ///
 /// Example usage:
 /// @code
-/// LOG_INFO(myLogger, "The answer is " << x << " or something");
+/// LOGINF(myLogger, "The answer is " << x << " or something");
 /// @endcode
 ///
 /// @param logger Destination logger
 /// @param message Message to log
-#define LOG_INFO(logger, message) do { \
-  LOG(logger, rustLaunchSite::Logger::Level::INF, message) \
+#define LOGINF(logger, message) do { \
+  LOG(logger, rustLaunchSite::LogLevel::INF, message) \
 } while (false)
 
 /// @brief Log a WARNING-level message to the specified logger
@@ -121,13 +214,13 @@ private:
 ///
 /// Example usage:
 /// @code
-/// LOG_WARNING(myLogger, "The answer is " << x << " or something");
+/// LOGWRN(myLogger, "The answer is " << x << " or something");
 /// @endcode
 ///
 /// @param logger Destination logger
 /// @param message Message to log
-#define LOG_WARNING(logger, message) do { \
-  LOG(logger, rustLaunchSite::Logger::Level::WRN, message) \
+#define LOGWRN(logger, message) do { \
+  LOG(logger, rustLaunchSite::LogLevel::WRN, message) \
 } while (false)
 
 
@@ -136,13 +229,13 @@ private:
 ///
 /// Example usage:
 /// @code
-/// LOG_ERROR(myLogger, "The answer is " << x << " or something");
+/// LOGERR(myLogger, "The answer is " << x << " or something");
 /// @endcode
 ///
 /// @param logger Destination logger
 /// @param message Message to log
-#define LOG_ERROR(logger, message) do { \
-  LOG(logger, rustLaunchSite::Logger::Level::ERR, message) \
+#define LOGERR(logger, message) do { \
+  LOG(logger, rustLaunchSite::LogLevel::ERR, message) \
 } while (false)
 }
 

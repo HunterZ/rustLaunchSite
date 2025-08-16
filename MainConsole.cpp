@@ -40,14 +40,15 @@ std::unique_ptr<CtrlCHandleT, decltype(DeleteCtrlCHandle)> MakeCtrlCHandle()
 int main(int argc, char *argv[])
 {
   // allocate logger on the stack so that it auto-destructs at end of main()
-  // also, this is a stdout / std::cout logger since this is the console flavor
-  rustLaunchSite::Logger logger{};
+  // also, use stdout / std::cout logging sink since this is the console flavor
+  rustLaunchSite::Logger logger{
+    std::make_shared<rustLaunchSite::LogSinkStdout>()};
 
   // attempt to install Ctrl+C handler
   auto ctrlCHandle{MakeCtrlCHandle()}; // NOSONAR this needs to live
   if (CtrlCLibrary::kErrorID == *ctrlCHandle)
   {
-    LOG_ERROR(logger, "Failed to install Ctrl+C handler");
+    LOGERR(logger, "Failed to install Ctrl+C handler");
     return rustLaunchSite::RLS_EXIT_HANDLER;
   }
 

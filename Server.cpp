@@ -157,7 +157,7 @@ Server::Server(Logger& logger, std::shared_ptr<const Config> cfgSptr)
       pParamName == "+server.seed"
     )
     {
-      LOG_WARNING(logger_, "Ignoring configured launch parameter `" << pParamName << "` because it's value will be determined automatically by rustLaunchSite");
+      LOGWRN(logger_, "Ignoring configured launch parameter `" << pParamName << "` because it's value will be determined automatically by rustLaunchSite");
       continue;
     }
     // push parameter name (prefix is already prepended)
@@ -224,7 +224,7 @@ Server::~Server()
     }
     catch (const std::exception& e)
     {
-      LOG_WARNING(logger_, "Caught exception while stopping server: " << e.what());
+      LOGWRN(logger_, "Caught exception while stopping server: " << e.what());
     }
   }
 }
@@ -275,7 +275,7 @@ Server::Info Server::GetInfo()
   }
   catch (const nlohmann::json::exception& e)
   {
-    LOG_WARNING(logger_, "Error parsing RCON serverinfo response as JSON: " << e.what() << "\nResponse contents: " << serverInfo);
+    LOGWRN(logger_, "Error parsing RCON serverinfo response as JSON: " << e.what() << "\nResponse contents: " << serverInfo);
     retVal.valid_ = false;
   }
   return retVal;
@@ -286,7 +286,7 @@ bool Server::IsRunning() const
   // we should always have an impl pointer
   if (!processImplUptr_)
   {
-    LOG_WARNING(logger_, "Invalid ProcessImpl pointer");
+    LOGWRN(logger_, "Invalid ProcessImpl pointer");
     return false;
   }
   // if we don't have a process pointer, we're not running
@@ -305,12 +305,12 @@ std::string Server::SendRconCommand(
 {
   if (!IsRunning())
   {
-    LOG_WARNING(logger_, "Can't send RCON command due to server not running");
+    LOGWRN(logger_, "Can't send RCON command due to server not running");
     return std::string();
   }
   if (!rconUptr_)
   {
-    LOG_WARNING(logger_, "Failed to send RCON command due to RCON not available/connected");
+    LOGWRN(logger_, "Failed to send RCON command due to RCON not available/connected");
     return std::string();
   }
   return rconUptr_->SendCommand(command, waitForResponse ? 10000 : 0);
@@ -320,18 +320,18 @@ bool Server::Start()
 {
   if (IsRunning())
   {
-    LOG_WARNING(logger_, "Can't start server because it's already running");
+    LOGWRN(logger_, "Can't start server because it's already running");
     return true;
   }
   if (!processImplUptr_)
   {
-    LOG_WARNING(logger_, "ProcessImpl pointer is invalid");
+    LOGWRN(logger_, "ProcessImpl pointer is invalid");
     return false;
   }
   if (processImplUptr_->processUptr_)
   {
     // don't warn since this happens in the case of an unexpected restart
-    // LOG_WARNING(logger_, "Resetting defunct server process handle");
+    // LOGWRN(logger_, "Resetting defunct server process handle");
     processImplUptr_->processUptr_.reset();
   }
   std::error_code errorCode{};
@@ -360,27 +360,27 @@ bool Server::Start()
   );
   if (!processImplUptr_->processUptr_)
   {
-    LOG_WARNING(logger_, "Failed to create server process handle");
+    LOGWRN(logger_, "Failed to create server process handle");
     return false;
   }
   if (errorCode)
   {
-    LOG_WARNING(logger_, "Error creating server process: " << errorCode.message());
+    LOGWRN(logger_, "Error creating server process: " << errorCode.message());
     processImplUptr_->processUptr_.reset();
     return false;
   }
   for (std::size_t i(0); i < 10 && !IsRunning(); ++i)
   {
-    LOG_WARNING(logger_, "Server not running - waiting...");
+    LOGWRN(logger_, "Server not running - waiting...");
     std::this_thread::sleep_for(std::chrono::seconds(2));
   }
   if (!IsRunning())
   {
-    LOG_WARNING(logger_, "Server failed to launch");
+    LOGWRN(logger_, "Server failed to launch");
     processImplUptr_->processUptr_.reset();
     return false;
   }
-  LOG_INFO(logger_, "Server launched successfully");
+  LOGINF(logger_, "Server launched successfully");
   return true;
 }
 
@@ -388,13 +388,13 @@ void Server::Stop(const std::string& reason)
 {
   if (!IsRunning())
   {
-    // LOG_WARNING(logger_, "Can't stop server because it's not running");
+    // LOGWRN(logger_, "Can't stop server because it's not running");
     return;
   }
-  LOG_INFO(logger_, "Stop(): Stopping server for reason: " << reason);
+  LOGINF(logger_, "Stop(): Stopping server for reason: " << reason);
   if (!processImplUptr_ || !processImplUptr_->processUptr_)
   {
-    LOG_WARNING(logger_, "Process handle/impl pointer is null");
+    LOGWRN(logger_, "Process handle/impl pointer is null");
     return;
   }
   auto& process(*processImplUptr_->processUptr_);
@@ -404,17 +404,17 @@ void Server::Stop(const std::string& reason)
     // delay shutdown if/as appropriate
     StopDelay(reason);
     // send RCON quit command and wait for some amount of time for shutdown
-    LOG_INFO(logger_, "Commanding server quit via RCON");
+    LOGINF(logger_, "Commanding server quit via RCON");
     SendRconCommand("quit", true);
     for (std::size_t i(0); i < 10 && IsRunning(); ++i)
     {
-      LOG_INFO(logger_, "Waiting for server to quit...");
+      LOGINF(logger_, "Waiting for server to quit...");
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
   }
   else
   {
-    LOG_WARNING(logger_, "RCON is not available; cannot issue shutdown commands");
+    LOGWRN(logger_, "RCON is not available; cannot issue shutdown commands");
   }
   std::error_code errorCode;
 #if !_MSC_VER && !defined(__MINGW32__)
@@ -422,32 +422,32 @@ void Server::Stop(const std::string& reason)
   //  shutdown than the SIGKILL sent by terminate()
   if (IsRunning())
   {
-    LOG_WARNING(logger_, "Server still running; interrupting process");
+    LOGWRN(logger_, "Server still running; interrupting process");
     if (-1 == kill(processImplUptr_->processUptr_->id(), SIGINT))
     {
-      LOG_WARNING(logger_, "POSIX kill(SIGINT) returned error code: " << strerror(errno));
+      LOGWRN(logger_, "POSIX kill(SIGINT) returned error code: " << strerror(errno));
     }
     // interrupt shutdown isn't instantaneous, so allow for another wait cycle
     for (std::size_t i(0); i < 10 && IsRunning(); ++i)
     {
-      LOG_INFO(logger_, "Waiting for server to terminate...");
+      LOGINF(logger_, "Waiting for server to terminate...");
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
   }
 #endif
   if (IsRunning())
   {
-    LOG_WARNING(logger_, "Server still running; killing process");
+    LOGWRN(logger_, "Server still running; killing process");
     process.terminate(errorCode);
   }
   if (errorCode)
   {
-    LOG_WARNING(logger_, "Process library returned error code: " << errorCode.message());
+    LOGWRN(logger_, "Process library returned error code: " << errorCode.message());
   }
 
   if (const auto exitCode(process.exit_code()); exitCode)
   {
-    LOG_WARNING(logger_, "Server process returned nonzero exit code: " << exitCode);
+    LOGWRN(logger_, "Server process returned nonzero exit code: " << exitCode);
   }
   // dump the pointer, since we can't re-launch the process at this point
   // NOTE: this invalidates local reference `process`
@@ -458,11 +458,11 @@ void Server::StopDelay(std::string_view reason)
 {
   if (!stopDelaySeconds_)
   {
-    LOG_INFO(logger_, "Skipping shutdown delay checks");
+    LOGINF(logger_, "Skipping shutdown delay checks");
     return;
   }
 
-  LOG_INFO(logger_, "Performing shutdown delay checks");
+  LOGINF(logger_, "Performing shutdown delay checks");
   // latest possible shutdown time
   const std::chrono::steady_clock::time_point shutdownTime(
     std::chrono::steady_clock::now() +
@@ -501,7 +501,7 @@ void Server::StopDelay(std::string_view reason)
     // fudge the count by one second so that it looks nicer
     std::stringstream s;
     s << remainingTimeSeconds.count() + 1;
-    LOG_INFO(logger_, serverInfo.players_ << " player(s) online; delaying shutdown by up to " << s.str() << " second(s)");
+    LOGINF(logger_, serverInfo.players_ << " player(s) online; delaying shutdown by up to " << s.str() << " second(s)");
     std::string sayString("say *** Shutdown in ");
     sayString.append(s.str()).append(" second(s)");
     if (!reason.empty())
@@ -511,7 +511,7 @@ void Server::StopDelay(std::string_view reason)
     // don't wait for response, as it comes in with id=-1
     SendRconCommand(sayString, false);
     // sleep until next mark
-    LOG_INFO(logger_, "Sleeping from " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << " until " << std::chrono::duration_cast<std::chrono::seconds>(nextMarkTime.time_since_epoch()).count() << "; latest shutdown at " << std::chrono::duration_cast<std::chrono::seconds>(shutdownTime.time_since_epoch()).count());
+    LOGINF(logger_, "Sleeping from " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << " until " << std::chrono::duration_cast<std::chrono::seconds>(nextMarkTime.time_since_epoch()).count() << "; latest shutdown at " << std::chrono::duration_cast<std::chrono::seconds>(shutdownTime.time_since_epoch()).count());
     std::this_thread::sleep_until(nextMarkTime);
   }
 }

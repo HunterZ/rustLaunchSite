@@ -146,7 +146,7 @@ int CopyArchiveData(
       archive_write_data_block(aw.get(), buff, size, offset)};
     if (writeResult < ARCHIVE_OK)
     {
-      LOG_INFO(logger, "Failed to write extracted file data: " << archive_error_string(aw.get()));
+      LOGINF(logger, "Failed to write extracted file data: " << archive_error_string(aw.get()));
       return static_cast<int>(writeResult);
     }
   }
@@ -163,9 +163,7 @@ bool CheckArchiveResult(
   const bool isError{result < ARCHIVE_WARN};
   LOG(
     logger
-    , isError ?
-      rustLaunchSite::Logger::Level::ERR :
-      rustLaunchSite::Logger::Level::WRN
+    , isError ? rustLaunchSite::LogLevel::ERR : rustLaunchSite::LogLevel::WRN
     , prefix << ": " << arch ? archive_error_string(arch.get()) : "");
     return !isError;
 }
@@ -196,10 +194,10 @@ void FixPermissions(
   );
   if (ec)
   {
-    LOG_WARNING(logger, "Issue while setting execute permissions on file " << filePath << ": " << ec.message());
+    LOGWRN(logger, "Issue while setting execute permissions on file " << filePath << ": " << ec.message());
     return;
   }
-  LOG_INFO(logger, "Set execute permissions on file " << filePath);
+  LOGINF(logger, "Set execute permissions on file " << filePath);
 }
 
 // extract Carbon/Oxide release archive into server installation directory
@@ -212,7 +210,7 @@ void ExtractArchiveData(
 {
   if (archData.size() < 2)
   {
-    LOG_WARNING(logger, "Cannot update " << frameworkTitle << " because valid data was not downloaded from URL " << url);
+    LOGWRN(logger, "Cannot update " << frameworkTitle << " because valid data was not downloaded from URL " << url);
     return;
   }
   auto arch{GetReadArchive()};
@@ -232,7 +230,7 @@ void ExtractArchiveData(
   else
   {
     // unknown
-    LOG_WARNING(logger, "Failed to determine " << frameworkTitle << " archive format for data of length=" << archData.size() << " downloaded from URL " << url);
+    LOGWRN(logger, "Failed to determine " << frameworkTitle << " archive format for data of length=" << archData.size() << " downloaded from URL " << url);
     return;
   }
   // bind arch to data blob
@@ -240,7 +238,7 @@ void ExtractArchiveData(
     archive_read_open_memory(arch.get(), archData.data(), archData.size())};
   if (ARCHIVE_OK != result)
   {
-    LOG_WARNING(logger, "Failed to open " << frameworkTitle << " archive data of length=" << archData.size() << " downloaded from URL " << url);
+    LOGWRN(logger, "Failed to open " << frameworkTitle << " archive data of length=" << archData.size() << " downloaded from URL " << url);
     return;
   }
   // allocate a handle for writing extracted data to disk
@@ -273,7 +271,7 @@ void ExtractArchiveData(
     result = archive_write_header(outFile.get(), entry);
     if (result < ARCHIVE_OK)
     {
-      LOG_WARNING(logger, "Issue while creating output file " << outFilePath << ": " << archive_error_string(outFile.get()));
+      LOGWRN(logger, "Issue while creating output file " << outFilePath << ": " << archive_error_string(outFile.get()));
     }
     else if (archive_entry_size(entry) > 0 && !CheckArchiveResult(
       logger
@@ -296,7 +294,7 @@ void ExtractArchiveData(
     {
       break;
     }
-    LOG_INFO(logger, "Extracted file " << outFilePath);
+    LOGINF(logger, "Extracted file " << outFilePath);
     FixPermissions(logger, outFilePath);
   }
   archive_read_close(arch.get());
@@ -384,24 +382,24 @@ Updater::Updater(
 
   if (!std::filesystem::exists(appManifestPath_))
   {
-    LOG_WARNING(logger_, "Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled");
+    LOGWRN(logger_, "Steam app manifest file " << appManifestPath_ << " does not exist; automatic Steam updates disabled");
     appManifestPath_.clear();
   }
 
   if (!std::filesystem::exists(steamCmdPath_))
   {
-    LOG_WARNING(logger_, "Failed to locate SteamCMD at config file specified path " << steamCmdPath_ << "; automatic Steam updates disabled");
+    LOGWRN(logger_, "Failed to locate SteamCMD at config file specified path " << steamCmdPath_ << "; automatic Steam updates disabled");
     steamCmdPath_.clear();
   }
 
   if (
     !frameworkDllPath_.empty() && !std::filesystem::exists(frameworkDllPath_))
   {
-    LOG_WARNING(logger_, "Modding framework DLL '" << frameworkDllPath_ << "' not found; automatic " << ToString(cfgSptr->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " updates disabled");
+    LOGWRN(logger_, "Modding framework DLL '" << frameworkDllPath_ << "' not found; automatic " << ToString(cfgSptr->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " updates disabled");
     frameworkDllPath_.clear();
   }
 
-  // LOG_INFO(logger_, "Updater initialized. Server updates " << (serverUpdateCheck_ ? "enabled" : "disabled") << ". Oxide updates " << (oxideUpdateCheck_ ? "enabled" : "disabled")<< "");
+  // LOGINF(logger_, "Updater initialized. Server updates " << (serverUpdateCheck_ ? "enabled" : "disabled") << ". Oxide updates " << (oxideUpdateCheck_ ? "enabled" : "disabled")<< "");
 }
 
 Updater::~Updater() = default;
@@ -415,9 +413,9 @@ bool Updater::CheckFramework() const
   const auto& frameworkTitle{
     ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE)};
   const auto& currentVersion(GetInstalledFrameworkVersion());
-  LOG_INFO(logger_, "CheckFramework(): Installed " << frameworkTitle << " version: '" << currentVersion << "'");
+  LOGINF(logger_, "CheckFramework(): Installed " << frameworkTitle << " version: '" << currentVersion << "'");
   const auto& latestVersion(GetLatestFrameworkVersion());
-  LOG_INFO(logger_, "CheckFramework(): Latest " << frameworkTitle << " version: '" << latestVersion << "'");
+  LOGINF(logger_, "CheckFramework(): Latest " << frameworkTitle << " version: '" << latestVersion << "'");
   return (
     !currentVersion.empty() && !latestVersion.empty() &&
     currentVersion != latestVersion
@@ -427,11 +425,24 @@ bool Updater::CheckFramework() const
 bool Updater::CheckServer() const
 {
   const std::string& currentServerVersion(GetInstalledServerBuild());
-  LOG_INFO(logger_, "CheckServer(): Installed Server version: '" << currentServerVersion << "'");
-  const std::string& latestServerVersion(
-    GetLatestServerBuild(GetInstalledServerBranch())
-  );
-  LOG_INFO(logger_, "CheckServer(): Latest Server version: '" << latestServerVersion << "'");
+  LOGINF(logger_, "CheckServer(): Installed Server version: '" << currentServerVersion << "'");
+  std::string latestServerVersion;
+  for (std::size_t i{0}; i < 5 && latestServerVersion.empty(); ++i)
+  {
+    if (i)
+    {
+      LOGINF(logger_, "CheckServer(): Retrying latest Server version check...");
+    }
+    latestServerVersion = GetLatestServerBuild(GetInstalledServerBranch());
+  }
+  if (latestServerVersion.empty())
+  {
+    LOGWRN(logger_, "CheckServer(): Exhausted latest Server version check attempts");
+  }
+  else
+  {
+    LOGINF(logger_, "CheckServer(): Latest Server version: '" << latestServerVersion << "'");
+  }
   return (
     !currentServerVersion.empty() && !latestServerVersion.empty() &&
     currentServerVersion != latestServerVersion
@@ -453,7 +464,7 @@ void Updater::UpdateFramework(const bool suppressWarning) const
   {
     if (!suppressWarning)
     {
-      LOG_WARNING(logger_, "Cannot update " << frameworkTitle << " because a previous installation was not detected");
+      LOGWRN(logger_, "Cannot update " << frameworkTitle << " because a previous installation was not detected");
     }
     return;
   }
@@ -461,7 +472,7 @@ void Updater::UpdateFramework(const bool suppressWarning) const
   // abort if any required path is empty, meaning it failed validation
   if (serverInstallPath_.empty())
   {
-    LOG_WARNING(logger_, "Cannot update " << frameworkTitle << " because server install path is invalid");
+    LOGWRN(logger_, "Cannot update " << frameworkTitle << " because server install path is invalid");
     return;
   }
 
@@ -469,7 +480,7 @@ void Updater::UpdateFramework(const bool suppressWarning) const
   const auto& url{GetLatestFrameworkURL()};
   if (url.empty())
   {
-    LOG_WARNING(logger_, "Cannot update " << frameworkTitle << " because download URL was not found");
+    LOGWRN(logger_, "Cannot update " << frameworkTitle << " because download URL was not found");
     return;
   }
   // download archive to RAM
@@ -484,7 +495,7 @@ void Updater::UpdateServer() const
   // abort if any required path is empty, meaning it failed validation
   if (serverInstallPath_.empty() || steamCmdPath_.empty())
   {
-    LOG_WARNING(logger_, "Cannot update server because install and/or steamcmd path is invalid");
+    LOGWRN(logger_, "Cannot update server because install and/or steamcmd path is invalid");
     return;
   }
 
@@ -513,12 +524,12 @@ void Updater::UpdateServer() const
   ));
   if (errorCode)
   {
-    LOG_WARNING(logger_, "Error running server update command: " << errorCode.message());
+    LOGWRN(logger_, "Error running server update command: " << errorCode.message());
     return;
   }
   if (exitCode)
   {
-    LOG_WARNING(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
+    LOGWRN(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
     return;
   }
 }
@@ -541,22 +552,22 @@ std::string Updater::GetAppManifestValue(
   {
     if (warn)
     {
-      LOG_WARNING(logger, "Exception parsing server app manifest: " << ex.what());
+      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
     }
     retVal.clear();
   }
   catch (const std::exception& ex)
   {
-    LOG_WARNING(logger, "Exception parsing server app manifest: " << ex.what());
+    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
     retVal.clear();
   }
   catch (...)
   {
-    LOG_WARNING(logger, "Unknown exception parsing server app manifest");
+    LOGWRN(logger, "Unknown exception parsing server app manifest");
     retVal.clear();
   }
 
-  // LOG_INFO(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
+  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
 
   return retVal;
 }
@@ -573,7 +584,7 @@ std::string Updater::GetInstalledFrameworkVersion() const
   const auto& psPath{boost::process::v1::search_path("powershell.exe")};
   if (psPath.empty())
   {
-    LOG_WARNING(logger_, "Failed to find powershell");
+    LOGWRN(logger_, "Failed to find powershell");
     return retVal;
   }
   std::error_code errorCode;
@@ -589,12 +600,12 @@ std::string Updater::GetInstalledFrameworkVersion() const
   ));
   if (errorCode)
   {
-    LOG_WARNING(logger_, "Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message());
+    LOGWRN(logger_, "Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message());
     return retVal;
   }
   if (exitCode)
   {
-    LOG_WARNING(logger_, "Powershell returned nonzero exit code: " << exitCode);
+    LOGWRN(logger_, "Powershell returned nonzero exit code: " << exitCode);
     return retVal;
   }
   // grab first line of output stream into retVal string
@@ -611,7 +622,7 @@ std::string Updater::GetInstalledFrameworkVersion() const
   const auto& psPath{boost::process::v1::search_path("monodis")};
   if (psPath.empty())
   {
-    LOG_WARNING(logger_, "Failed to find monodis; you may need to install mono-utils or similar");
+    LOGWRN(logger_, "Failed to find monodis; you may need to install mono-utils or similar");
     return retVal;
   }
   std::error_code errorCode;
@@ -626,12 +637,12 @@ std::string Updater::GetInstalledFrameworkVersion() const
   ));
   if (errorCode)
   {
-    LOG_WARNING(logger_, "Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message());
+    LOGWRN(logger_, "Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message());
     return retVal;
   }
   if (exitCode)
   {
-    LOG_WARNING(logger_, "" << psPath << " returned nonzero exit code: " << exitCode);
+    LOGWRN(logger_, "" << psPath << " returned nonzero exit code: " << exitCode);
     return retVal;
   }
   // find the line that begins with "Version:"
@@ -685,12 +696,11 @@ std::string Updater::GetInstalledServerBuild() const
 
 std::string Updater::GetLatestServerBuild(const std::string_view branch) const
 {
-  std::string retVal;
   // abort if any required path is empty, meaning it failed validation
   if (serverInstallPath_.empty() || steamCmdPath_.empty())
   {
-    LOG_WARNING(logger_, "Cannot check for server updates because install and/or steamcmd path is invalid");
-    return retVal;
+    LOGWRN(logger_, "Cannot check for server updates because install and/or steamcmd path is invalid");
+    return {};
   }
   // write a script for steamcmd to run
   // this is needed because steamcmd acts very buggy when I try to use other
@@ -703,8 +713,8 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   std::ofstream scriptFile(scriptFilePath, std::ios::trunc);
   if (!scriptFile.is_open())
   {
-    LOG_WARNING(logger_, "Failed to open steamcmd script file `" << scriptFilePath << "`");
-    return retVal;
+    LOGWRN(logger_, "Failed to open steamcmd script file `" << scriptFilePath << "`");
+    return {};
   }
   scriptFile
     << "force_install_dir " << serverInstallPath_ << "\n"
@@ -775,17 +785,17 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   // report any process errors
   if (errorCode)
   {
-    LOG_WARNING(logger_, "Error running server update command: " << errorCode.message()<< "");
+    LOGWRN(logger_, "Error running server update command: " << errorCode.message() << "");
   }
   if (const auto exitCode{sc.exit_code()}; exitCode)
   {
-    LOG_WARNING(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
+    LOGWRN(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
   }
   // audit output
   if (readState != COMPLETE)
   {
-    LOG_WARNING(logger_, "SteamCMD output did not include a valid app info tree");
-    return retVal;
+    LOGWRN(logger_, "SteamCMD output did not include a valid app info tree");
+    return {};
   }
   // process output
   std::stringstream ss(steamInfo);
@@ -793,7 +803,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   {
     boost::property_tree::ptree tree;
     boost::property_tree::read_info(ss, tree);
-    retVal = tree.get<std::string>(
+    return tree.get<std::string>(
       std::string{"258550.depots.branches."} +
       (branch.empty() ? "public" : branch.data()) +
       ".buildid"
@@ -801,22 +811,20 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   }
   catch (const std::exception& ex)
   {
-    LOG_WARNING(logger_, "Exception parsing SteamCMD output: " << ex.what()<< "");
-    retVal.clear();
+    LOGWRN(logger_, "Exception parsing SteamCMD output: " << ex.what()<< "");
   }
   catch (...)
   {
-    LOG_WARNING(logger_, "Unknown exception parsing SteamCMD output");
-    retVal.clear();
+    LOGWRN(logger_, "Unknown exception parsing SteamCMD output");
   }
-  return retVal;
+  return {};
 }
 
 std::string Updater::GetLatestFrameworkURL() const
 {
   if (!downloaderSptr_)
   {
-    LOG_WARNING(logger_, "Downloader handle is null");
+    LOGWRN(logger_, "Downloader handle is null");
     return {};
   }
   const auto modFrameworkType{cfgSptr_->GetUpdateModFrameworkType()};
@@ -839,12 +847,12 @@ std::string Updater::GetLatestFrameworkURL() const
   }
   catch (const nlohmann::json::exception& e)
   {
-    LOG_WARNING(logger_, "Exception extracting download URL from " << frameworkTitle << " releases JSON: " << e.what());
-    LOG_WARNING(logger_, "\t...Input string: '" << frameworkInfo << "'");
+    LOGWRN(logger_, "Exception extracting download URL from " << frameworkTitle << " releases JSON: " << e.what());
+    LOGWRN(logger_, "\t...Input string: '" << frameworkInfo << "'");
     return {};
   }
 
-  LOG_WARNING(logger_, "Failed to extract download URL from " << frameworkTitle << " releases JSON");
+  LOGWRN(logger_, "Failed to extract download URL from " << frameworkTitle << " releases JSON");
   return {};
 }
 
@@ -852,7 +860,7 @@ std::string Updater::GetLatestFrameworkVersion() const
 {
   if (!downloaderSptr_)
   {
-    LOG_WARNING(logger_, "Downloader handle is null");
+    LOGWRN(logger_, "Downloader handle is null");
     return {};
   }
   const auto modFrameworkType{cfgSptr_->GetUpdateModFrameworkType()};
@@ -877,7 +885,7 @@ std::string Updater::GetLatestFrameworkVersion() const
         //  means release naming has changed
         if (carbonVersion.find(CARBON_PREFIX) != 0)
         {
-          LOG_WARNING(logger_, "Carbon release prefix not found in version string: " << carbonVersion);
+          LOGWRN(logger_, "Carbon release prefix not found in version string: " << carbonVersion);
           return {};
         }
         // return everything *after* the prefix string
@@ -886,22 +894,22 @@ std::string Updater::GetLatestFrameworkVersion() const
       // just return the raw release name for Oxide
       case Config::ModFrameworkType::OXIDE: return j["name"];
     }
-    LOG_WARNING(logger_, "Unsupported plugin framework");
+    LOGWRN(logger_, "Unsupported plugin framework");
     return {};
   }
   catch(const nlohmann::json::exception& e)
   {
-    LOG_WARNING(logger_, "JSON exception while extracting version name from " << frameworkTitle << " release data: " << e.what() << "\n\t...Input data: " << frameworkInfo);
+    LOGWRN(logger_, "JSON exception while extracting version name from " << frameworkTitle << " release data: " << e.what() << "\n\t...Input data: " << frameworkInfo);
     return {};
   }
   catch (const std::exception& e)
   {
-    LOG_WARNING(logger_, "General exception while extracting version name from " << frameworkTitle << " release data: " << e.what() << "\n\t...Input data: " << frameworkInfo);
+    LOGWRN(logger_, "General exception while extracting version name from " << frameworkTitle << " release data: " << e.what() << "\n\t...Input data: " << frameworkInfo);
     return {};
   }
   catch (...)
   {
-    LOG_WARNING(logger_, "Unknown exception while extracting version name from " << frameworkTitle << " release data\n\t...Input data: " << frameworkInfo);
+    LOGWRN(logger_, "Unknown exception while extracting version name from " << frameworkTitle << " release data\n\t...Input data: " << frameworkInfo);
     return {};
   }
 }

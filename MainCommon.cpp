@@ -151,13 +151,13 @@ std::pair<bool, bool> UpdateCheck(
   std::pair<bool, bool> retVal{false, false};
   if (checkServer)
   {
-    LOG_INFO(logger, "Performing server update check");
+    LOGINF(logger, "Performing server update check");
     retVal.first = updater.CheckServer();
   }
   if (const bool forceCheck{updateModFrameworkOnServer && retVal.first};
       checkModFramework || forceCheck)
   {
-    LOG_INFO(logger, "Performing mod framework update check");
+    LOGINF(logger, "Performing mod framework update check");
     retVal.second = updater.CheckFramework();
   }
   return retVal;
@@ -169,21 +169,21 @@ void UpdateFramework(
   const rustLaunchSite::Updater& updater,
   const int retryDelaySeconds = 0, const bool suppressWarning = false)
 {
-  LOG_INFO(logger, "Entering plugin framework update loop");
+  LOGINF(logger, "Entering plugin framework update loop");
   bool firstTry{true};
   for(bool update{true}; update; update = updater.CheckFramework())
   {
     if (!firstTry)
     {
-      LOG_WARNING(logger, "Detected plugin framework version mismatch after update attempt...");
+      LOGWRN(logger, "Detected plugin framework version mismatch after update attempt...");
       if (retryDelaySeconds > 0)
       {
-        LOG_WARNING(logger, "\t...waiting for " << retryDelaySeconds << " second(s) before trying again");
+        LOGWRN(logger, "\t...waiting for " << retryDelaySeconds << " second(s) before trying again");
         std::this_thread::sleep_for(std::chrono::seconds(retryDelaySeconds));
       }
       else
       {
-        LOG_WARNING(logger, "\t...trying again immediately");
+        LOGWRN(logger, "\t...trying again immediately");
       }
     }
 
@@ -191,7 +191,7 @@ void UpdateFramework(
 
     firstTry = false;
   }
-  LOG_INFO(logger, "Completed plugin framework update loop");
+  LOGINF(logger, "Completed plugin framework update loop");
 }
 
 // wrapper around Updater::UpdateServer() to loop until update succeeds
@@ -200,21 +200,21 @@ void UpdateServer(
   const rustLaunchSite::Updater& updater,
   const int retryDelaySeconds = 0)
 {
-  LOG_INFO(logger, "Entering server update loop");
+  LOGINF(logger, "Entering server update loop");
   bool firstTry{true};
   for(bool update{true}; update; update = updater.CheckServer())
   {
     if (!firstTry)
     {
-      LOG_WARNING(logger, "Detected server version mismatch after update attempt...");
+      LOGWRN(logger, "Detected server version mismatch after update attempt...");
       if (retryDelaySeconds > 0)
       {
-        LOG_WARNING(logger, "\t...waiting for " << retryDelaySeconds << " second(s) before trying again");
+        LOGWRN(logger, "\t...waiting for " << retryDelaySeconds << " second(s) before trying again");
         std::this_thread::sleep_for(std::chrono::seconds(retryDelaySeconds));
       }
       else
       {
-        LOG_WARNING(logger, "\t...trying again immediately");
+        LOGWRN(logger, "\t...trying again immediately");
       }
     }
 
@@ -222,7 +222,7 @@ void UpdateServer(
 
     firstTry = false;
   }
-  LOG_INFO(logger, "Completed server update loop");
+  LOGINF(logger, "Completed server update loop");
 }
 
 // get shutdown reason from text file if one exists
@@ -233,7 +233,7 @@ std::string GetShutdownReason(
 {
   if (!std::filesystem::exists(reasonPath))
   {
-    LOG_INFO(logger, "No reason file at reasonPath=" << reasonPath);
+    LOGINF(logger, "No reason file at reasonPath=" << reasonPath);
     return std::string{fallbackReason};
   }
 
@@ -253,7 +253,7 @@ std::string GetShutdownReason(
       if (!retVal.empty()) retVal.append("\n");
       retVal.append(line);
     }
-    LOG_INFO(logger, "Read " << lineCount << " line(s) from reasonPath=" << reasonPath);
+    LOGINF(logger, "Read " << lineCount << " line(s) from reasonPath=" << reasonPath);
     // if more than one nonempty line read, ensure reason starts with a newline
     if (nonEmptyLineCount > 1 && !retVal.empty() && retVal.at(0) != '\n')
     {
@@ -262,7 +262,7 @@ std::string GetShutdownReason(
   }
   else
   {
-    LOG_WARNING(logger, "Failed to open reason file at reasonPath=" << reasonPath);
+    LOGWRN(logger, "Failed to open reason file at reasonPath=" << reasonPath);
     // don't return, because we still want to try to remove the file
     retVal = fallbackReason;
   }
@@ -270,11 +270,11 @@ std::string GetShutdownReason(
   reasonStream.close();
   if (std::filesystem::remove(reasonPath))
   {
-    LOG_INFO(logger, "Deleted reason file at reasonPath=" << reasonPath);
+    LOGINF(logger, "Deleted reason file at reasonPath=" << reasonPath);
   }
   else
   {
-    LOG_WARNING(logger, "Failed to delete reason file at reasonPath=" << reasonPath);
+    LOGWRN(logger, "Failed to delete reason file at reasonPath=" << reasonPath);
   }
 
   return retVal;
@@ -285,11 +285,11 @@ namespace rustLaunchSite
 {
 int Start(Logger& logger, int argc, char* argv[])
 {
-  LOG_INFO(logger, "Starting");
+  LOGINF(logger, "Starting");
 
   if (argc <= 1)
   {
-    LOG_ERROR(logger, "Configuration file/path must be specified as an argument");
+    LOGERR(logger, "Configuration file/path must be specified as an argument");
     return RLS_EXIT_ARG;
   }
 
@@ -341,33 +341,33 @@ int Start(Logger& logger, int argc, char* argv[])
     }
 
     // launch server
-    LOG_INFO(logger, "Starting server");
+    LOGINF(logger, "Starting server");
     if (!serverUptr->Start())
     {
-      LOG_ERROR(logger, "Server failed to start");
+      LOGERR(logger, "Server failed to start");
       // okay to just abort at this point
       return RLS_EXIT_START;
     }
 
     // start timer thread
-    LOG_INFO(logger, "Starting timer thread");
+    LOGINF(logger, "Starting timer thread");
     timerThreadUptr = std::make_unique<std::thread>(
       &TimerFunction, 1, configSptr->GetUpdateIntervalMinutes()
     );
     if (!timerThreadUptr)
     {
-      LOG_ERROR(logger, "Failed to instantiate timer thread");
+      LOGERR(logger, "Failed to instantiate timer thread");
       return RLS_EXIT_THREAD;
     }
 
     // main loop
-    LOG_INFO(logger, "Starting main event loop");
+    LOGINF(logger, "Starting main event loop");
     while (true)
     {
       // grab mutex for safe state variable access in loop when awake
       std::unique_lock lock(threadData::mutex_);
       // sleep until we get a notification from the timer thread
-      // LOG_INFO(logger, "Waiting for events");
+      // LOGINF(logger, "Waiting for events");
       threadData::cvMain_.wait
       (
         lock,
@@ -383,7 +383,7 @@ int Start(Logger& logger, int argc, char* argv[])
       if (threadData::notifyMainStop_.test())
       {
         // attempt an orderly shutdown
-        LOG_INFO(logger, "Server manager stop requested; stopping server");
+        LOGINF(logger, "Server manager stop requested; stopping server");
         ::SetTimerState(TimerState::STOP);
         serverUptr->Stop(GetShutdownReason(
           logger
@@ -429,7 +429,7 @@ int Start(Logger& logger, int argc, char* argv[])
               configSptr->GetUpdateModFrameworkType()));
           }
           // stop server
-          LOG_INFO(logger, "Update(s) required: " << updateReason << "; stopping server");
+          LOGINF(logger, "Update(s) required: " << updateReason << "; stopping server");
           // install updates
           serverUptr->Stop("Installing update(s): " + updateReason);
           if (updateServerOnInterval)
@@ -446,10 +446,10 @@ int Start(Logger& logger, int argc, char* argv[])
             , configSptr->GetUpdateModFrameworkRetryDelaySeconds()
             , updateServerOnInterval);
           }
-          LOG_INFO(logger, "Update(s) complete; starting server");
+          LOGINF(logger, "Update(s) complete; starting server");
           if (!serverUptr->Start())
           {
-            LOG_ERROR(logger, "Server failed to start");
+            LOGERR(logger, "Server failed to start");
             retVal = RLS_EXIT_UPDATE;
             break;
           }
@@ -470,7 +470,7 @@ int Start(Logger& logger, int argc, char* argv[])
           if (const auto& serverInfo(serverUptr->GetInfo());
               serverInfo.valid_)
           {
-            LOG_INFO(logger, "rustLaunchSite: Got server info via RCON: players=" << serverInfo.players_ << ", protocol=" << serverInfo.protocol_);
+            LOGINF(logger, "rustLaunchSite: Got server info via RCON: players=" << serverInfo.players_ << ", protocol=" << serverInfo.protocol_);
           }
         }
         // server is not running
@@ -479,7 +479,7 @@ int Start(Logger& logger, int argc, char* argv[])
           // configured to automatically restart
           // pause timers during server restart
           ::SetTimerState(TimerState::PAUSE);
-          LOG_INFO(logger, "Server stopped unexpectedly");
+          LOGINF(logger, "Server stopped unexpectedly");
           // check for updates while the server is down
           const auto [updateServerOnRelaunch, updateModFrameworkOnRelaunch] =
             UpdateCheck(
@@ -505,10 +505,10 @@ int Start(Logger& logger, int argc, char* argv[])
             , updateServerOnRelaunch);
           }
           // relaunch server
-          LOG_INFO(logger, "Relaunching server");
+          LOGINF(logger, "Relaunching server");
           if (!serverUptr->Start())
           {
-            LOG_ERROR(logger, "Server failed to relaunch");
+            LOGERR(logger, "Server failed to relaunch");
             retVal = RLS_EXIT_RESTART;
             break;
           }
@@ -518,7 +518,7 @@ int Start(Logger& logger, int argc, char* argv[])
         {
           // configured to shutdown on unexpected server stop
           ::SetTimerState(TimerState::STOP);
-          LOG_ERROR(logger, "Server stopped unexpectedly");
+          LOGERR(logger, "Server stopped unexpectedly");
           retVal = RLS_EXIT_RESTART;
           break;
         }
@@ -526,23 +526,23 @@ int Start(Logger& logger, int argc, char* argv[])
       // end of main loop
     }
 
-    LOG_INFO(logger, "Exited main loop; beginning shutdown process");
-    LOG_INFO(logger, "Stopping timer thread");
+    LOGINF(logger, "Exited main loop; beginning shutdown process");
+    LOGINF(logger, "Stopping timer thread");
     ::SetTimerState(TimerState::STOP);
     timerThreadUptr->join();
-    LOG_INFO(logger, "Stopping server (if running)");
+    LOGINF(logger, "Stopping server (if running)");
     serverUptr->Stop(GetShutdownReason(
       logger
     , configSptr->GetProcessReasonPath(), "Server manager shutting down"));
   }
   catch (const std::exception& e)
   {
-    LOG_ERROR(logger, "ERROR: Unhandled exception: " << e.what());
+    LOGERR(logger, "ERROR: Unhandled exception: " << e.what());
     retVal = RLS_EXIT_EXCEPTION;
   }
   catch(...)
   {
-    LOG_ERROR(logger, "ERROR: Unknown exception");
+    LOGERR(logger, "ERROR: Unknown exception");
     retVal = RLS_EXIT_EXCEPTION;
   }
 
@@ -554,7 +554,7 @@ int Start(Logger& logger, int argc, char* argv[])
     timerThreadUptr->join();
   }
 
-  LOG_INFO(logger, "Exiting");
+  LOGINF(logger, "Exiting");
 
   return retVal;
 }

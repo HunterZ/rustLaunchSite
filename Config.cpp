@@ -94,7 +94,7 @@ void GetParametersTo(
       break;
       default:
       {
-        LOG_WARNING(logger, "Ignoring JSON itemPath='" << itemPath << "' with unsupported type");
+        LOGWRN(logger, "Ignoring JSON itemPath='" << itemPath << "' with unsupported type");
       }
     }
   }
@@ -106,7 +106,7 @@ Config::Config(Logger& logger, std::filesystem::path configFile)
   : logger_{logger}
 {
   configFile.make_preferred();
-  LOG_INFO(logger_, "Loading config file: " << configFile);
+  LOGINF(logger_, "Loading config file: " << configFile);
   // attempt to parse configFile via nlohmann/json
   nlohmann::json j{};
   try
@@ -257,7 +257,7 @@ Config::Config(Logger& logger, std::filesystem::path configFile)
         jRlsSteamcmd.at("path").get_to(steamcmdPath_);
         if (!std::filesystem::exists(steamcmdPath_))
         {
-          LOG_WARNING(logger_, "SteamCMD not found at configured path " << steamcmdPath_ << "; will attempt to get from environment");
+          LOGWRN(logger_, "SteamCMD not found at configured path " << steamcmdPath_ << "; will attempt to get from environment");
         }
       }
     }
@@ -270,11 +270,11 @@ Config::Config(Logger& logger, std::filesystem::path configFile)
     steamcmdPath_.make_preferred();
     if (std::filesystem::exists(steamcmdPath_))
     {
-      LOG_INFO(logger_, "Using SteamCMD at path: " << steamcmdPath_);
+      LOGINF(logger_, "Using SteamCMD at path: " << steamcmdPath_);
     }
     else
     {
-      LOG_WARNING(logger_, "SteamCMD not found; dependent features may not work");
+      LOGWRN(logger_, "SteamCMD not found; dependent features may not work");
     }
 
     // update
@@ -318,7 +318,7 @@ Config::Config(Logger& logger, std::filesystem::path configFile)
         }
         else if (!modFrameworkType.empty())
         {
-          LOG_WARNING(logger_, "Ignoring unsupported modFramework.type value: '" << modFrameworkType << "'");
+          LOGWRN(logger_, "Ignoring unsupported modFramework.type value: '" << modFrameworkType << "'");
         }
         if (updateModFrameworkType_ != ModFrameworkType::NONE)
         {
@@ -349,19 +349,19 @@ Config::Config(Logger& logger, std::filesystem::path configFile)
       else if (updateIntervalMinutes_
         && !updateServerOnInterval_ && !updateModFrameworkOnInterval_)
       {
-        LOG_WARNING(logger_, "Ignoring update.intervalMinutes value because update.server and update.modFramework onInterval are both false: '" << updateIntervalMinutes_ << "'");
+        LOGWRN(logger_, "Ignoring update.intervalMinutes value because update.server and update.modFramework onInterval are both false: '" << updateIntervalMinutes_ << "'");
         updateIntervalMinutes_ = 0;
       }
       if (!updateIntervalMinutes_)
       {
         if (updateServerOnInterval_)
         {
-          LOG_WARNING(logger_, "Ignoring update.server.onInterval=true because update.intervalMinutes=0");
+          LOGWRN(logger_, "Ignoring update.server.onInterval=true because update.intervalMinutes=0");
           updateServerOnInterval_ = false;
         }
         if (updateModFrameworkOnInterval_)
         {
-          LOG_WARNING(logger_, "Ignoring update.modFramework.onInterval=true because update.intervalMinutes=0");
+          LOGWRN(logger_, "Ignoring update.modFramework.onInterval=true because update.intervalMinutes=0");
           updateModFrameworkOnInterval_ = false;
         }
       }

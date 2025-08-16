@@ -30,12 +30,12 @@ std::size_t WriteToFile(
 {
   if (!dataPtr || !filePtr)
   {
-    // LOG_WARNING(logger, "Null pointer(s) passed to Curl file write handler");
+    // LOGWRN(logger, "Null pointer(s) passed to Curl file write handler");
     return 0;
   }
   const std::size_t numBytes(size * nmemb);
   filePtr->write(dataPtr, numBytes);
-  // LOG_INFO(logger, "Wrote " << numBytes << " bytes to download file");
+  // LOGINF(logger, "Wrote " << numBytes << " bytes to download file");
   return numBytes;
 }
 
@@ -50,7 +50,7 @@ std::size_t WriteToString(
 {
   if (!dataPtr || !stringPtr)
   {
-    // LOG_WARNING(logger, "Null pointer(s) passed to Curl string write handler");
+    // LOGWRN(logger, "Null pointer(s) passed to Curl string write handler");
     return 0;
   }
   const std::size_t numBytes(size * nmemb);
@@ -69,7 +69,7 @@ std::size_t WriteToVector(
 {
   if (!dataPtr || !vPtr)
   {
-    // LOG_WARNING(logger, "Null pointer(s) passed to Curl vector write handler");
+    // LOGWRN(logger, "Null pointer(s) passed to Curl vector write handler");
     return 0;
   }
   const std::size_t numBytes(size * nmemb);
@@ -96,13 +96,13 @@ bool Downloader::GetUrlToFile(
   );
   if (!outFile)
   {
-    LOG_WARNING(logger_, "Failed to open output file for write: " << file);
+    LOGWRN(logger_, "Failed to open output file for write: " << file);
     return false;
   }
   auto* curlPtr(curl_easy_init());
   if (!curlPtr)
   {
-    LOG_WARNING(logger_, "curl_easy_init() returned nullptr");
+    LOGWRN(logger_, "curl_easy_init() returned nullptr");
     outFile.close();
     std::filesystem::remove(file);
     return false;
@@ -122,7 +122,7 @@ bool Downloader::GetUrlToFile(
   outFile.close();
   if (curlCode != CURLE_OK)
   {
-    LOG_WARNING(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
+    LOGWRN(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
     std::filesystem::remove(file);
     return false;
   }
@@ -135,7 +135,7 @@ std::string Downloader::GetUrlToString(std::string_view url) const
   auto* curlPtr(curl_easy_init());
   if (!curlPtr)
   {
-    LOG_WARNING(logger_, "curl_easy_init() returned nullptr");
+    LOGWRN(logger_, "curl_easy_init() returned nullptr");
     return retVal;
   }
   CURLcode curlCode(CURLE_OK);
@@ -154,7 +154,7 @@ std::string Downloader::GetUrlToString(std::string_view url) const
   curl_easy_cleanup(curlPtr);
   if (curlCode != CURLE_OK)
   {
-    LOG_WARNING(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
+    LOGWRN(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
     retVal.clear();
   }
   return retVal;
@@ -166,7 +166,7 @@ std::vector<char> Downloader::GetUrlToVector(std::string_view url) const
   auto* curlPtr(curl_easy_init());
   if (!curlPtr)
   {
-    LOG_WARNING(logger_, "curl_easy_init() returned nullptr");
+    LOGWRN(logger_, "curl_easy_init() returned nullptr");
     return retVal;
   }
   CURLcode curlCode(CURLE_OK);
@@ -185,7 +185,7 @@ std::vector<char> Downloader::GetUrlToVector(std::string_view url) const
   curl_easy_cleanup(curlPtr);
   if (curlCode != CURLE_OK)
   {
-    LOG_WARNING(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
+    LOGWRN(logger_, "Curl failure for URL `" << url << "`: " << curl_easy_strerror(curlCode) << "");
     retVal.clear();
   }
   return retVal;
@@ -210,7 +210,7 @@ Downloader::InitHandle Downloader::GetInitHandle(Logger& logger)
 
   // shared pointer is invalid, so make a new one
   ++handleNumber;
-  LOG_INFO(logger, "Initializing downloader handle #" << handleNumber);
+  LOGINF(logger, "Initializing downloader handle #" << handleNumber);
   curl_global_init(CURL_GLOBAL_ALL);
   // shared pointer points at our static handle count, but instead of managing
   //  its memory, the deleter performs a global libcurl cleanup action
@@ -218,7 +218,7 @@ Downloader::InitHandle Downloader::GetInitHandle(Logger& logger)
   {
     &handleNumber, [&logger](std::size_t const* hn)
     {
-      LOG_INFO(logger, "Deinitializing downloader handle #" << *hn);
+      LOGINF(logger, "Deinitializing downloader handle #" << *hn);
       curl_global_cleanup();
     }
   };

@@ -14,7 +14,7 @@ namespace
 /// Environment variable to check for config file path+name
 const std::string ENV_CONFIG_PATH{"RLS_CONFIG_PATH"};
 /// Environment variable to check for log file path+name
-const std::string ENV_LOG_PATH{"RLS_LOG_PATH"};
+[[maybe_unused]] const std::string ENV_LOG_PATH{"RLS_LOG_PATH"};
 /// Default config file name when not specified via config file
 const std::string DEFAULT_CONFIG_FILE{"rustLaunchSite.jsonc"};
 const std::string DEFAULT_LOG_FILE{"rustLaunchSite.log"};
@@ -155,8 +155,14 @@ int main(int argc, char* argv[])
   rustLaunchSite::Logger logger
   {
 #if defined(_WIN32) || defined(_WIN64)
-    // only Windows logs to file for now
-    GetLogPath()
+    // Windows logs to file for now
+    std::make_shared<rustLaunchSite::LogSinkFile>(GetLogPath())
+#elif defined(RLS_SYSLOG)
+    // POSIX OSes log to syslog for now
+    std::make_shared<rustLaunchSite::LogSinkSyslog>()
+#else
+    // fall back to stdout I guess
+    std::make_shared<rustLaunchSite::LogSinkStdout>()
 #endif
   };
 
@@ -183,25 +189,25 @@ int main(int argc, char* argv[])
       L"rustLaunchSite",
       [&logger, &rlsThread, &fakeArgv]()
       {
-        LOG_INFO(logger, "Starting RLS thread");
+        LOGINF(logger, "Starting RLS thread");
         rlsThread = std::thread{[&logger, &fakeArgv]()
         {
-          LOG_INFO(logger, "Starting RLS core");
+          LOGINF(logger, "Starting RLS core");
           rustLaunchSite::Start(
             logger
           , static_cast<int>(fakeArgv.size())
           , fakeArgv.data());
-          LOG_INFO(logger, "RLS core returned");
+          LOGINF(logger, "RLS core returned");
         }};
-        LOG_INFO(logger, "RLS thread started");
+        LOGINF(logger, "RLS thread started");
       },
       [&logger, &rlsThread]()
       {
-        LOG_INFO(logger, "Stopping RLS core");
+        LOGINF(logger, "Stopping RLS core");
         rustLaunchSite::Stop();
-        LOG_INFO(logger, "Joining RLS thread");
+        LOGINF(logger, "Joining RLS thread");
         rlsThread.join();
-        LOG_INFO(logger, "RLS thread joined");
+        LOGINF(logger, "RLS thread joined");
       },
       []()
       {
