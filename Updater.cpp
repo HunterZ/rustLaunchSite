@@ -675,7 +675,7 @@ std::string Updater::GetInstalledFrameworkVersion() const
   {
     retVal.resize(sepPos);
   }
-  if (retVal.empty)
+  if (retVal.empty())
   {
     LOGWRN(logger_, "Failed to extract Carbon version from monodis line: " << line);
   }
@@ -800,7 +800,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   // audit output
   if (readState != COMPLETE)
   {
-    LOGWRN(logger_, "SteamCMD output did not include a valid app info tree");
+    LOGWRN(logger_, "SteamCMD output did not include a valid app info tree:\n" << steamInfo);
     return {};
   }
   // process output
@@ -817,7 +817,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   }
   catch (const std::exception& ex)
   {
-    LOGWRN(logger_, "Exception parsing SteamCMD output: " << ex.what()<< "");
+    LOGWRN(logger_, "Exception parsing SteamCMD output: " << ex.what());
   }
   catch (...)
   {
@@ -877,6 +877,11 @@ std::string Updater::GetLatestFrameworkVersion() const
   try
   {
     const auto& j(nlohmann::json::parse(frameworkInfo));
+    if (!j.contains("name"))
+    {
+      LOGWRN(logger_, "Data received from frameworkURL=" << frameworkURL << " missing JSON 'name': " << frameworkInfo);
+      return {};
+    }
     switch (modFrameworkType)
     {
       case Config::ModFrameworkType::NONE: break;
