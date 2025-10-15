@@ -675,6 +675,10 @@ std::string Updater::GetInstalledFrameworkVersion() const
   {
     retVal.resize(sepPos);
   }
+  if (retVal.empty)
+  {
+    LOGWRN(logger_, "Failed to extract Carbon version from monodis line: " << line);
+  }
   // return version number or empty string
   return retVal;
 #endif
@@ -682,11 +686,13 @@ std::string Updater::GetInstalledFrameworkVersion() const
 
 std::string Updater::GetInstalledServerBranch() const
 {
-  return GetAppManifestValue(
+  const auto& branch(GetAppManifestValue(
     logger_
   , appManifestPath_
   , "AppState.UserConfig.BetaKey"
-  , false);
+  , false));
+  // clean installs may not have a branch listed in appmanifest; assume public
+  return branch.empty() ? "public" : branch;
 }
 
 std::string Updater::GetInstalledServerBuild() const
