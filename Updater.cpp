@@ -3,45 +3,30 @@
 #include "Config.h"
 #include "Downloader.h"
 #include "Logger.h"
-#include <boost/asio/buffer.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/readable_pipe.hpp>
-#include <boost/process/v2/environment.hpp>
-#include <boost/process/v2/stdio.hpp>
 
 #if _MSC_VER
   // make Boost happy when building with MSVC
   #include <sdkddkver.h>
 #endif
 
-#include <boost/asio.hpp>
-#include <boost/process.hpp>
-// #include <boost/process/v1/args.hpp>
-// #include <boost/process/v1/child.hpp>
-// #include <boost/process/v1/error.hpp>
-// #include <boost/process/v1/exe.hpp>
-// #include <boost/process/v1/io.hpp>
-// #include <boost/process/v1/pipe.hpp>
-// #include <boost/process/v1/search_path.hpp>
-// #include <boost/process/v1/system.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/readable_pipe.hpp>
+#include <boost/process/environment.hpp>
+#include <boost/process/stdio.hpp>
+#include <boost/process/process.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 // these must be included after boost, because it #include's Windows.h
 #include <archive.h>
 #include <archive_entry.h>
-// #include <fstream>
 #include <nlohmann/json.hpp>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
 #include <vector>
-
-#if _MSC_VER
-  #include <io.h> // _access_s()
-#else
-  #include <unistd.h> // access()
-#endif
 
 namespace
 {
@@ -383,18 +368,19 @@ std::string RunExecutable(
   return output;
 }
 
-std::string GetAppManifestValue(
+template<typename TreeReadFunc>
+std::string GetAppManifestValueCommon(
   rustLaunchSite::Logger& logger
-, const std::filesystem::path& appManifestPath
-, const std::string_view keyPath
+, TreeReadFunc trf
+, std::string_view keyPath
 , const bool warn = true)
 {
-  std::string retVal{};
+  std::string retVal;
 
   try
   {
     boost::property_tree::ptree tree;
-    boost::property_tree::read_info(appManifestPath.string(), tree);
+    trf(tree);
     retVal = tree.get<std::string>(keyPath.data());
   }
   catch (const boost::property_tree::ptree_bad_path& ex)
@@ -423,41 +409,37 @@ std::string GetAppManifestValue(
 
 std::string GetAppManifestValue(
   rustLaunchSite::Logger& logger
-, const std::string& appManifestData
-, const std::string_view keyPath
+, const std::filesystem::path& appManifestPath
+, std::string_view keyPath
 , const bool warn = true)
 {
-  std::string retVal;
-  std::stringstream stream{appManifestData};
-
-  try
-  {
-    boost::property_tree::ptree tree;
-    boost::property_tree::read_info(stream, tree);
-    retVal = tree.get<std::string>(keyPath.data());
-  }
-  catch (const boost::property_tree::ptree_bad_path& ex)
-  {
-    if (warn)
+  return GetAppManifestValueCommon(
+    logger,
+    [&appManifestPath](boost::property_tree::ptree& tree)
     {
-      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    }
-    retVal.clear();
-  }
-  catch (const std::exception& ex)
-  {
-    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    retVal.clear();
-  }
-  catch (...)
-  {
-    LOGWRN(logger, "Unknown exception parsing server app manifest");
-    retVal.clear();
-  }
+      boost::property_tree::read_info(appManifestPath.string(), tree);
+    },
+    keyPath,
+    warn
+  );
+}
 
-  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
-
-  return retVal;
+std::string GetAppManifestValue(
+  rustLaunchSite::Logger& logger
+, const std::string& appManifestData
+, std::string_view keyPath
+, const bool warn = true)
+{
+  return GetAppManifestValueCommon(
+    logger,
+    [&appManifestData](boost::property_tree::ptree& tree)
+    {
+      std::stringstream stream{appManifestData};
+      boost::property_tree::read_info(stream, tree);
+    },
+    keyPath,
+    warn
+  );
 }
 }
 
