@@ -45,7 +45,7 @@
 
 namespace
 {
-inline bool IsDirectory(const std::filesystem::path& path)
+bool IsDirectory(const std::filesystem::path& path)
 {
   const auto& targetPath(
     std::filesystem::is_symlink(path) ?
@@ -53,13 +53,6 @@ inline bool IsDirectory(const std::filesystem::path& path)
   );
   return std::filesystem::is_directory(targetPath);
 }
-
-enum class SteamCmdReadState
-{
-  FIND_INFO_START,
-  FIND_INFO_END,
-  COMPLETE
-};
 
 enum class ToStringCase
 {
@@ -356,6 +349,116 @@ std::string_view GetFrameworkAsset(
   }
   return FRAMEWORK_ASSET.at(index);
 }
+
+template<typename P>
+std::string RunExecutable(
+  rustLaunchSite::Logger& logger,
+  const P& exe,
+  const std::vector<std::string>& args)
+{
+  if (exe.empty()) return {};
+
+  boost::asio::io_context ioContext;
+  boost::asio::readable_pipe readPipe{ioContext};
+  boost::process::process proc(
+    ioContext, exe, args, boost::process::process_stdio{{}, readPipe, readPipe}
+  );
+  std::string output;
+  boost::system::error_code errorCode;
+  boost::asio::read(readPipe, boost::asio::dynamic_buffer(output), errorCode);
+  proc.wait();
+
+  // LOGINF(logger, exe << " output:\n" << output);
+
+  if (errorCode && boost::asio::error::eof != errorCode)
+  {
+    LOGWRN(logger, "Got error code " << errorCode.value() << " / category " << errorCode.category().name() << " running " << exe << ": " << errorCode.message());
+  }
+  const auto exitCode(proc.exit_code());
+  if (proc.exit_code())
+  {
+    LOGWRN(logger, "Got nonzero exit code " << exitCode << " running " << exe);
+  }
+
+  return output;
+}
+
+std::string GetAppManifestValue(
+  rustLaunchSite::Logger& logger
+, const std::filesystem::path& appManifestPath
+, const std::string_view keyPath
+, const bool warn = true)
+{
+  std::string retVal{};
+
+  try
+  {
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_info(appManifestPath.string(), tree);
+    retVal = tree.get<std::string>(keyPath.data());
+  }
+  catch (const boost::property_tree::ptree_bad_path& ex)
+  {
+    if (warn)
+    {
+      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
+    }
+    retVal.clear();
+  }
+  catch (const std::exception& ex)
+  {
+    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
+    retVal.clear();
+  }
+  catch (...)
+  {
+    LOGWRN(logger, "Unknown exception parsing server app manifest");
+    retVal.clear();
+  }
+
+  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
+
+  return retVal;
+}
+
+std::string GetAppManifestValue(
+  rustLaunchSite::Logger& logger
+, const std::string& appManifestData
+, const std::string_view keyPath
+, const bool warn = true)
+{
+  std::string retVal;
+  std::stringstream stream{appManifestData};
+
+  try
+  {
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_info(stream, tree);
+    retVal = tree.get<std::string>(keyPath.data());
+  }
+  catch (const boost::property_tree::ptree_bad_path& ex)
+  {
+    if (warn)
+    {
+      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
+    }
+    retVal.clear();
+  }
+  catch (const std::exception& ex)
+  {
+    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
+    retVal.clear();
+  }
+  catch (...)
+  {
+    LOGWRN(logger, "Unknown exception parsing server app manifest");
+    retVal.clear();
+  }
+
+  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
+
+  return retVal;
+}
 }
 
 namespace rustLaunchSite
@@ -524,109 +627,8 @@ void Updater::UpdateServer() const
   }
   args.emplace_back("validate");
   args.emplace_back("+quit");
-  boost::asio::io_context ioContext;
-  boost::asio::readable_pipe readPipe{ioContext};
-  const auto& steamCmdPath(steamCmdPath_.string());
-  boost::process::process proc(
-    ioContext,
-    steamCmdPath,
-    std::move(args),
-    boost::process::process_stdio{{}, readPipe, readPipe}
-  );
-  std::string output;
-  boost::system::error_code errorCode;
-  boost::asio::read(readPipe, boost::asio::dynamic_buffer(output), errorCode);
-  proc.wait();
 
-  LOGINF(logger_, steamCmdPath << " output:\n" << output);
-
-  if (errorCode && boost::asio::error::eof != errorCode)
-  {
-    LOGWRN(logger_, "Got error code " << errorCode.value() << " / category " << errorCode.category().name() << " running " << steamCmdPath << ": " << errorCode.message());
-  }
-  const auto exitCode(proc.exit_code());
-  if (proc.exit_code())
-  {
-    LOGWRN(logger_, "Got nonzero exit code " << exitCode << " running " << steamCmdPath);
-  }
-}
-
-std::string Updater::GetAppManifestValue(
-  Logger& logger
-, const std::filesystem::path& appManifestPath
-, const std::string_view keyPath
-, const bool warn)
-{
-  std::string retVal{};
-
-  try
-  {
-    boost::property_tree::ptree tree;
-    boost::property_tree::read_info(appManifestPath.string(), tree);
-    retVal = tree.get<std::string>(keyPath.data());
-  }
-  catch (const boost::property_tree::ptree_bad_path& ex)
-  {
-    if (warn)
-    {
-      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    }
-    retVal.clear();
-  }
-  catch (const std::exception& ex)
-  {
-    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    retVal.clear();
-  }
-  catch (...)
-  {
-    LOGWRN(logger, "Unknown exception parsing server app manifest");
-    retVal.clear();
-  }
-
-  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
-
-  return retVal;
-}
-
-
-std::string Updater::GetAppManifestValue(
-  Logger& logger
-, const std::string& appManifestData
-, const std::string_view keyPath
-, const bool warn)
-{
-  std::string retVal;
-  std::stringstream stream{appManifestData};
-
-  try
-  {
-    boost::property_tree::ptree tree;
-    boost::property_tree::read_info(stream, tree);
-    retVal = tree.get<std::string>(keyPath.data());
-  }
-  catch (const boost::property_tree::ptree_bad_path& ex)
-  {
-    if (warn)
-    {
-      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    }
-    retVal.clear();
-  }
-  catch (const std::exception& ex)
-  {
-    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    retVal.clear();
-  }
-  catch (...)
-  {
-    LOGWRN(logger, "Unknown exception parsing server app manifest");
-    retVal.clear();
-  }
-
-  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
-
-  return retVal;
+  RunExecutable(logger_, steamCmdPath_.string(), args);
 }
 
 std::string Updater::GetInstalledFrameworkVersion() const
@@ -634,39 +636,25 @@ std::string Updater::GetInstalledFrameworkVersion() const
   std::string retVal;
   if (frameworkDllPath_.empty()) { return retVal; }
 #if _MSC_VER || defined(__MINGW32__)
-  // run powershell and grab all output into inStream
-  boost::process::v1::ipstream inStream;
-  // for some reason boost requires explicitly requesting a PATH search unless
-  //  we want to pass the entire command as a single string
-  const auto& psPath{boost::process::v1::search_path("powershell.exe")};
+  // TODO: make powershell path configurable?
+  const auto& psPath(
+    boost::process::environment::find_executable("powershell.exe"));
   if (psPath.empty())
   {
-    LOGWRN(logger_, "Failed to find powershell");
+    LOGWRN(logger_, "Failed to find powershell; you may need to install mono-utils or similar");
     return retVal;
   }
-  boost::system::error_code errorCode;
-  const int exitCode(boost::process::v1::system(
-    boost::process::v1::exe(psPath),
-    boost::process::v1::args({
+
+  retVal = RunExecutable(
+    logger_,
+    psPath,
+    {
       "-Command",
-      std::string("(Get-Item '") + frameworkDllPath_.string() +
+      "(Get-Item '" + frameworkDllPath_.string() +
         "').VersionInfo.ProductVersion"
-    }),
-    boost::process::v1::std_out > inStream,
-    boost::process::v1::error(errorCode)
-  ));
-  if (errorCode)
-  {
-    LOGWRN(logger_, "Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message());
-    return retVal;
-  }
-  if (exitCode)
-  {
-    LOGWRN(logger_, "Powershell returned nonzero exit code: " << exitCode);
-    return retVal;
-  }
-  // grab first line of output stream into retVal string
-  std::getline(inStream, retVal);
+    }
+  );
+
   // for some reason this has a newline at the end, so strip that off
   while (retVal.back() == '\r' || retVal.back() == '\n') { retVal.pop_back(); }
   // strip off anything starting with `+` or `-` if present
@@ -681,30 +669,8 @@ std::string Updater::GetInstalledFrameworkVersion() const
     return retVal;
   }
 
-  boost::asio::io_context ioContext;
-  boost::asio::readable_pipe readPipe{ioContext};
-  boost::process::process proc(
-    ioContext,
-    monodisPath,
-    {"--assembly", frameworkDllPath_.string()},
-    boost::process::process_stdio{{}, readPipe, readPipe}
-  );
-  std::string output;
-  boost::system::error_code errorCode;
-  boost::asio::read(readPipe, boost::asio::dynamic_buffer(output), errorCode);
-  proc.wait();
-
-  LOGINF(logger_, monodisPath << " output:\n" << output);
-
-  if (errorCode && boost::asio::error::eof != errorCode)
-  {
-    LOGWRN(logger_, "Got error code " << errorCode.value() << " / category " << errorCode.category().name() << " running " << monodisPath << ": " << errorCode.message());
-  }
-  const auto exitCode(proc.exit_code());
-  if (proc.exit_code())
-  {
-    LOGWRN(logger_, "Got nonzero exit code " << exitCode << " running " << monodisPath);
-  }
+  const auto& output(RunExecutable(
+    logger_, monodisPath, {"--assembly", frameworkDllPath_.string()}));
 
   // attempt to extract version from output
   std::smatch match;
@@ -754,37 +720,17 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     return {};
   }
 
-  boost::asio::io_context ioContext;
-  const auto& steamCmdPath(steamCmdPath_.string());
-  boost::asio::readable_pipe readPipe{ioContext};
-  boost::process::process proc(
-    ioContext,
-    steamCmdPath,
+  const auto& output(RunExecutable(
+    logger_,
+    steamCmdPath_.string(),
     {
       "+force_install_dir", serverInstallPath_.string(),
       "+login", "anonymous",
       "+app_info_update", "1",
       "+app_info_print", "258550",
       "+quit"
-    },
-    boost::process::process_stdio{{}, readPipe, readPipe}
-  );
-  std::string output;
-  boost::system::error_code errorCode;
-  boost::asio::read(readPipe, boost::asio::dynamic_buffer(output), errorCode);
-  proc.wait();
-
-  LOGINF(logger_, steamCmdPath << " output:\n" << output);
-
-  if (errorCode && boost::asio::error::eof != errorCode)
-  {
-    LOGWRN(logger_, "Got error code " << errorCode.value() << " / category " << errorCode.category().name() << " running " << steamCmdPath << ": " << errorCode.message());
-  }
-  const auto exitCode(proc.exit_code());
-  if (proc.exit_code())
-  {
-    LOGWRN(logger_, "Got nonzero exit code " << exitCode << " running " << steamCmdPath);
-  }
+    }
+  ));
 
   const auto startPos(output.find("\"258550\""));
   if (std::string::npos != startPos)
