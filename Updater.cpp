@@ -3,27 +3,35 @@
 #include "Config.h"
 #include "Downloader.h"
 #include "Logger.h"
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/readable_pipe.hpp>
+#include <boost/process/v2/environment.hpp>
+#include <boost/process/v2/stdio.hpp>
 
 #if _MSC_VER
   // make Boost happy when building with MSVC
   #include <sdkddkver.h>
 #endif
 
-#include <boost/process/v1/args.hpp>
-#include <boost/process/v1/child.hpp>
-#include <boost/process/v1/error.hpp>
-#include <boost/process/v1/exe.hpp>
-#include <boost/process/v1/io.hpp>
-#include <boost/process/v1/pipe.hpp>
-#include <boost/process/v1/search_path.hpp>
-#include <boost/process/v1/system.hpp>
+#include <boost/asio.hpp>
+#include <boost/process.hpp>
+// #include <boost/process/v1/args.hpp>
+// #include <boost/process/v1/child.hpp>
+// #include <boost/process/v1/error.hpp>
+// #include <boost/process/v1/exe.hpp>
+// #include <boost/process/v1/io.hpp>
+// #include <boost/process/v1/pipe.hpp>
+// #include <boost/process/v1/search_path.hpp>
+// #include <boost/process/v1/system.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 // these must be included after boost, because it #include's Windows.h
 #include <archive.h>
 #include <archive_entry.h>
-#include <fstream>
+// #include <fstream>
 #include <nlohmann/json.hpp>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
@@ -516,21 +524,30 @@ void Updater::UpdateServer() const
   }
   args.emplace_back("validate");
   args.emplace_back("+quit");
-  std::error_code errorCode;
-  const int exitCode(boost::process::v1::system(
-    boost::process::v1::exe(steamCmdPath_.string()),
-    boost::process::v1::args(args),
-    boost::process::v1::error(errorCode)
-  ));
-  if (errorCode)
+  boost::asio::io_context ioContext;
+  boost::asio::readable_pipe readPipe{ioContext};
+  const auto& steamCmdPath(steamCmdPath_.string());
+  boost::process::process proc(
+    ioContext,
+    steamCmdPath,
+    std::move(args),
+    boost::process::process_stdio{{}, readPipe, readPipe}
+  );
+  std::string output;
+  boost::system::error_code errorCode;
+  boost::asio::read(readPipe, boost::asio::dynamic_buffer(output), errorCode);
+  proc.wait();
+
+  LOGINF(logger_, steamCmdPath << " output:\n" << output);
+
+  if (errorCode && boost::asio::error::eof != errorCode)
   {
-    LOGWRN(logger_, "Error running server update command: " << errorCode.message());
-    return;
+    LOGWRN(logger_, "Got error code " << errorCode.value() << " / category " << errorCode.category().name() << " running " << steamCmdPath << ": " << errorCode.message());
   }
-  if (exitCode)
+  const auto exitCode(proc.exit_code());
+  if (proc.exit_code())
   {
-    LOGWRN(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
-    return;
+    LOGWRN(logger_, "Got nonzero exit code " << exitCode << " running " << steamCmdPath);
   }
 }
 
@@ -572,6 +589,46 @@ std::string Updater::GetAppManifestValue(
   return retVal;
 }
 
+
+std::string Updater::GetAppManifestValue(
+  Logger& logger
+, const std::string& appManifestData
+, const std::string_view keyPath
+, const bool warn)
+{
+  std::string retVal;
+  std::stringstream stream{appManifestData};
+
+  try
+  {
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_info(stream, tree);
+    retVal = tree.get<std::string>(keyPath.data());
+  }
+  catch (const boost::property_tree::ptree_bad_path& ex)
+  {
+    if (warn)
+    {
+      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
+    }
+    retVal.clear();
+  }
+  catch (const std::exception& ex)
+  {
+    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
+    retVal.clear();
+  }
+  catch (...)
+  {
+    LOGWRN(logger, "Unknown exception parsing server app manifest");
+    retVal.clear();
+  }
+
+  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
+
+  return retVal;
+}
+
 std::string Updater::GetInstalledFrameworkVersion() const
 {
   std::string retVal;
@@ -587,7 +644,7 @@ std::string Updater::GetInstalledFrameworkVersion() const
     LOGWRN(logger_, "Failed to find powershell");
     return retVal;
   }
-  std::error_code errorCode;
+  boost::system::error_code errorCode;
   const int exitCode(boost::process::v1::system(
     boost::process::v1::exe(psPath),
     boost::process::v1::args({
@@ -615,69 +672,57 @@ std::string Updater::GetInstalledFrameworkVersion() const
   // strip off anything starting with `+` or `-` if present
   return retVal.substr(0, retVal.find_first_of("+-"));
 #else
-  // run monodis and grab all output into inStream
-  boost::process::v1::ipstream inStream;
-  // for some reason boost requires explicitly requesting a PATH search unless
-  //  we want to pass the entire command as a single string
-  const auto& psPath{boost::process::v1::search_path("monodis")};
-  if (psPath.empty())
+  // TODO: make monodis path configurable?
+  const auto& monodisPath(
+    boost::process::environment::find_executable("monodis"));
+  if (monodisPath.empty())
   {
     LOGWRN(logger_, "Failed to find monodis; you may need to install mono-utils or similar");
     return retVal;
   }
-  std::error_code errorCode;
-  const int exitCode(boost::process::v1::system(
-    boost::process::v1::exe(psPath),
-    boost::process::v1::args({
-      "--assembly",
-      frameworkDllPath_.string()
-    }),
-    boost::process::v1::std_out > inStream,
-    boost::process::v1::error(errorCode)
-  ));
-  if (errorCode)
+
+  boost::asio::io_context ioContext;
+  boost::asio::readable_pipe readPipe{ioContext};
+  boost::process::process proc(
+    ioContext,
+    monodisPath,
+    {"--assembly", frameworkDllPath_.string()},
+    boost::process::process_stdio{{}, readPipe, readPipe}
+  );
+  std::string output;
+  boost::system::error_code errorCode;
+  boost::asio::read(readPipe, boost::asio::dynamic_buffer(output), errorCode);
+  proc.wait();
+
+  LOGINF(logger_, monodisPath << " output:\n" << output);
+
+  if (errorCode && boost::asio::error::eof != errorCode)
   {
-    LOGWRN(logger_, "Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message());
-    return retVal;
+    LOGWRN(logger_, "Got error code " << errorCode.value() << " / category " << errorCode.category().name() << " running " << monodisPath << ": " << errorCode.message());
   }
-  if (exitCode)
+  const auto exitCode(proc.exit_code());
+  if (proc.exit_code())
   {
-    LOGWRN(logger_, "" << psPath << " returned nonzero exit code: " << exitCode);
-    return retVal;
+    LOGWRN(logger_, "Got nonzero exit code " << exitCode << " running " << monodisPath);
   }
-  // find the line that begins with "Version:"
-  std::string line;
-  while (std::getline(inStream, line))
+
+  // attempt to extract version from output
+  std::smatch match;
+  if (std::regex_search(
+    output, match, std::regex{R"(Version: *[0-9]+\.[0-9]+\.[0-9]+)"}))
   {
-    if (0 == line.find("Version:"))
+    const auto& matchStr(match.begin()->str());
+    std::smatch match2;
+    if (std::regex_search(
+      matchStr, match2, std::regex{R"([0-9]+\.[0-9]+\.[0-9]+)"}))
     {
-      // grab everything after "Version:" and after any spaces
-      retVal = line.substr(line.find_first_not_of(' ', 8));
-      break;
+      retVal = match2.begin()->str();
     }
   }
-  // chop off anything from the third version separator onwards (if present)
-  std::size_t sepCount{0};
-  std::size_t sepPos{};
-  for (std::size_t i{0}; i < retVal.length(); ++i)
-  {
-    if ('.' == retVal.at(i))
-    {
-      ++sepCount;
-      if (3 == sepCount)
-      {
-        sepPos = i;
-        break;
-      }
-    }
-  }
-  if (sepCount > 2 && sepPos > 0)
-  {
-    retVal.resize(sepPos);
-  }
+
   if (retVal.empty())
   {
-    LOGWRN(logger_, "Failed to extract Carbon version from monodis line: " << line);
+    LOGWRN(logger_, "Failed to extract Carbon version from monodis output");
   }
   // return version number or empty string
   return retVal;
@@ -708,121 +753,53 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     LOGWRN(logger_, "Cannot check for server updates because install and/or steamcmd path is invalid");
     return {};
   }
-  // write a script for steamcmd to run
-  // this is needed because steamcmd acts very buggy when I try to use other
-  //  methods
-  // TODO: this should go in RLS' data directory, not the server's
-  const std::filesystem::path scriptFilePath
-  {
-    serverInstallPath_ / "steamcmd.scr"
-  };
-  std::ofstream scriptFile(scriptFilePath, std::ios::trunc);
-  if (!scriptFile.is_open())
-  {
-    LOGWRN(logger_, "Failed to open steamcmd script file `" << scriptFilePath << "`");
-    return {};
-  }
-  scriptFile
-    << "force_install_dir " << serverInstallPath_ << "\n"
-    << "login anonymous\n"
-    << "app_info_update 1\n"
-    << "app_info_print 258550\n"
-    << "quit\n"
-  ;
-  scriptFile.close();
-  // launch steamcmd and extract desired info
-  boost::process::v1::ipstream fromChild; // from child to RLS
-  std::error_code errorCode;
-  boost::process::v1::child sc(
-    boost::process::v1::exe(steamCmdPath_.string()),
-    boost::process::v1::args({"+runscript", scriptFilePath.string()}),
-    boost::process::v1::std_out > fromChild,
-    boost::process::v1::error(errorCode)
-  );
-  // this will hold the extracted info blob as a string
-  std::string steamInfo;
-  // this will hold the most recently read line of output from steamcmd
-  std::string line;
-  // track info blob extraction status
-  using enum SteamCmdReadState;
-  SteamCmdReadState readState(FIND_INFO_START);
-  // now process output from steamcmd one line at a time
-  // NOTE: Boost.Process docs say not to read from steam unless app is
-  //  running, but this truncates the output so F that - we do what works!
-  while (std::getline(fromChild, line))
-  {
-    bool appendLine(false);
-    if (line.empty()) continue;
-    switch (readState)
+
+  boost::asio::io_context ioContext;
+  const auto& steamCmdPath(steamCmdPath_.string());
+  boost::asio::readable_pipe readPipe{ioContext};
+  boost::process::process proc(
+    ioContext,
+    steamCmdPath,
     {
-      case FIND_INFO_START:
-      {
-        // looking for "258550" (in double quotes, at start of line)
-        if (!line.empty() && line[0] == '\"' && line.find("\"258550\"") == 0)
-        {
-          appendLine = true;
-          readState = FIND_INFO_END;
-        }
-        break;
-      }
-      case FIND_INFO_END:
-      {
-        // append all lines in this mode
-        appendLine = true;
-        // looking for "}" as the first character to signal info blob end
-        if (!line.empty() && line[0] == '}')
-        {
-          readState = COMPLETE;
-        }
-        break;
-      }
-      case COMPLETE:
-      {
-        appendLine = false;
-        break;
-      }
-    }
-    if (appendLine)
-    {
-      steamInfo.append(line).append("\n");
-    }
-  }
-  sc.wait(errorCode);
-  // report any process errors
-  if (errorCode)
-  {
-    LOGWRN(logger_, "Error running server update command: " << errorCode.message() << "");
-  }
-  if (const auto exitCode{sc.exit_code()}; exitCode)
-  {
-    LOGWRN(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
-  }
-  // audit output
-  if (readState != COMPLETE)
-  {
-    LOGWRN(logger_, "SteamCMD output did not include a valid app info tree:\n" << steamInfo);
-    return {};
-  }
-  // process output
-  std::stringstream ss(steamInfo);
-  try
-  {
-    boost::property_tree::ptree tree;
-    boost::property_tree::read_info(ss, tree);
-    return tree.get<std::string>(
-      std::string{"258550.depots.branches."} +
-      (branch.empty() ? "public" : branch.data()) +
-      ".buildid"
+      "+force_install_dir", serverInstallPath_.string(),
+      "+login", "anonymous",
+      "+app_info_update", "1",
+      "+app_info_print", "258550",
+      "+quit"
+    },
+    boost::process::process_stdio{{}, readPipe, readPipe}
   );
-  }
-  catch (const std::exception& ex)
+  std::string output;
+  boost::system::error_code errorCode;
+  boost::asio::read(readPipe, boost::asio::dynamic_buffer(output), errorCode);
+  proc.wait();
+
+  LOGINF(logger_, steamCmdPath << " output:\n" << output);
+
+  if (errorCode && boost::asio::error::eof != errorCode)
   {
-    LOGWRN(logger_, "Exception parsing SteamCMD output: " << ex.what());
+    LOGWRN(logger_, "Got error code " << errorCode.value() << " / category " << errorCode.category().name() << " running " << steamCmdPath << ": " << errorCode.message());
   }
-  catch (...)
+  const auto exitCode(proc.exit_code());
+  if (proc.exit_code())
   {
-    LOGWRN(logger_, "Unknown exception parsing SteamCMD output");
+    LOGWRN(logger_, "Got nonzero exit code " << exitCode << " running " << steamCmdPath);
   }
+
+  const auto startPos(output.find("\"258550\""));
+  if (std::string::npos != startPos)
+  {
+    //258550.depots.branches.<branch>.buildid
+    static const std::string PATH_PREFIX("258550.depots.branches.");
+    constexpr std::string_view DEFAULT_BRANCH("public");
+    static const std::string PATH_SUFFIX(".buildid");
+    return GetAppManifestValue(logger_, output.substr(startPos),
+      PATH_PREFIX +
+      std::string(branch.empty() ? DEFAULT_BRANCH : branch) +
+      PATH_SUFFIX);
+  }
+
+  LOGWRN(logger_, "Failed to extract latest server version from SteamCMD output");
   return {};
 }
 

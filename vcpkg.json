@@ -2,6 +2,7 @@
   "name": "rust-launch-site",
   "version-string": "0.0.1",
   "dependencies": [
+    "boost-asio",
     "boost-dll",
     "boost-filesystem",
     "boost-process",

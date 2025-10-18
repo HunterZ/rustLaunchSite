@@ -95,6 +95,18 @@ private:
   , const bool warn = true
   );
 
+  // Find key with given period-delimited path, and return corresponding value
+  //  with double quotes stripped off.
+  // Returns empty string on error or key not found.
+  // Logs a warning if warn=true (default) and the specified path could not be
+  //  found.
+  static std::string GetAppManifestValue(
+    Logger& logger
+  , const std::string& appManifestData
+  , const std::string_view keyPath
+  , const bool warn = true
+  );
+
   // Get version number of the current Carbon/Oxide installation, or empty if
   //  not found
   std::string GetInstalledFrameworkVersion() const;
