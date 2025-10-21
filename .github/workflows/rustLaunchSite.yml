@@ -185,6 +185,7 @@ jobs:
 
       # hash ALL relevant files, and return whether a cache save is warranted
       - name: Update vcpkg cache (1/2)
+        shell: bash
         run: |
           CHECK_RESULT=$(bash "${{ github.workspace }}/.github/scripts/checkcache.sh" "${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/**/CMakeCache.txt', 'out/build/**/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/**/vcpkg_installed/status') }}")
           echo CHECK_OUTPUT=$CHECK_RESULT >> $GITHUB_OUTPUT
