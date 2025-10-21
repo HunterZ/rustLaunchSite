@@ -344,13 +344,14 @@ std::string RunExecutable(
   if (exe.empty()) return {};
 
   boost::asio::io_context ioContext;
-  boost::asio::readable_pipe readPipe{ioContext};
+  // only read stdout for now because Boost.Process v2 is stupid
+  boost::asio::readable_pipe stdoutPipe{ioContext};
   boost::process::process proc(
-    ioContext, exe, args, boost::process::process_stdio{{}, readPipe, readPipe}
+    ioContext, exe, args, boost::process::process_stdio{{}, stdoutPipe, {}}
   );
   std::string output;
   boost::system::error_code errorCode;
-  boost::asio::read(readPipe, boost::asio::dynamic_buffer(output), errorCode);
+  boost::asio::read(stdoutPipe, boost::asio::dynamic_buffer(output), errorCode);
   proc.wait();
 
   // LOGINF(logger, exe << " output:\n" << output);
