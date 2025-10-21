@@ -347,7 +347,7 @@ std::string RunExecutable(
   // only read stdout for now because Boost.Process v2 is stupid
   boost::asio::readable_pipe stdoutPipe{ioContext};
   boost::process::process proc(
-    ioContext, exe, args, boost::process::process_stdio{{}, stdoutPipe, {}}
+    ioContext, exe, args, boost::process::process_stdio{{}, stdoutPipe, nullptr}
   );
   std::string output;
   boost::system::error_code errorCode;
