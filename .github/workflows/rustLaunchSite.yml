@@ -141,7 +141,7 @@ jobs:
             ${{ github.workspace }}/out/build/*/vcpkg_installed
             ${{ github.workspace }}/vcpkg
           key:
-            cache-build-${{ matrix.triplet }}-${{ hashFiles('CMakeFiles.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/*/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/*/vcpkg_installed/status') }}
+            cache-build-${{ matrix.triplet }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/**/CMakeCache.txt', 'out/build/**/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/**/vcpkg_installed/status') }}
           restore-keys: |
             cache-build-${{ matrix.triplet }}-
       - name: Setup vcpkg (2/4)
@@ -184,9 +184,10 @@ jobs:
       - name: Dump hash key diagnostics
         shell: bash
         run: |
-          echo "hash CMakeFiles.txt:                " ${{ hashFiles('CMakeFiles.txt') }}
+          echo "hash CMakeLists.txt:                " ${{ hashFiles('CMakeLists.txt') }}
           echo "hash CMakePresets.json:             " ${{ hashFiles('CMakePresets.json') }}
           echo "hash vcpkg.json:                    " ${{ hashFiles('vcpkg.json') }}
-          echo "hash compiler-file-hash-cache.json: " ${{ hashFiles('out/build/*/vcpkg_installed/compiler-file-hash-cache.json') }}
-          echo "hash status:                        " ${{ hashFiles('out/build/*/vcpkg_installed/status') }}
-          echo "hash all:                           " ${{ hashFiles('CMakeFiles.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/*/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/*/vcpkg_installed/status') }}
+          echo "hash CMakeCache.txt:                " ${{ hashFiles('out/build/**/CMakeCache.txt') }}
+          echo "hash compiler-file-hash-cache.json: " ${{ hashFiles('out/build/**/vcpkg_installed/compiler-file-hash-cache.json') }}
+          echo "hash status:                        " ${{ hashFiles('out/build/**/vcpkg_installed/status') }}
+          echo "hash all:                           " ${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/**/CMakeCache.txt', 'out/build/**/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/**/vcpkg_installed/status') }}
