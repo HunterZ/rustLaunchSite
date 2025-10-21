@@ -135,15 +135,17 @@ jobs:
       # note that build type isn't considered in the cache key, because I now
       #  force use of release-flavored dependencies
       - name: Setup vcpkg (1/4)
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
-          path: |
-            ${{ github.workspace }}/out/build/*/vcpkg_installed
-            ${{ github.workspace }}/vcpkg
           key:
-            cache-build-${{ matrix.triplet }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/**/CMakeCache.txt', 'out/build/**/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/**/vcpkg_installed/status') }}
-          restore-keys: |
-            cache-build-${{ matrix.triplet }}-
+            # only hash on files present without configure/build
+            # note that this is separate from the files used to decide whether
+            #  to update the cache later
+            cache-build-${{ matrix.triplet }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json') }}
+          path: |
+            ${{ github.workspace }}/cache_hash.txt
+            ${{ github.workspace }}/out/build/**/vcpkg_installed
+            ${{ github.workspace }}/vcpkg
       - name: Setup vcpkg (2/4)
         uses: actions/checkout@v5
         with:
@@ -181,13 +183,20 @@ jobs:
           name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ matrix.triplet }}-${{ matrix.buildtype }}"
           path: "${{ github.workspace }}/out/install/${{ matrix.triplet }}"
 
-      - name: Dump hash key diagnostics
-        shell: bash
+      # hash ALL relevant files, and return whether a cache save is warranted
+      - name: Update vcpkg cache (1/2)
+        id: cache_vcpkg
         run: |
-          echo "hash CMakeLists.txt:                " ${{ hashFiles('CMakeLists.txt') }}
-          echo "hash CMakePresets.json:             " ${{ hashFiles('CMakePresets.json') }}
-          echo "hash vcpkg.json:                    " ${{ hashFiles('vcpkg.json') }}
-          echo "hash CMakeCache.txt:                " ${{ hashFiles('out/build/**/CMakeCache.txt') }}
-          echo "hash compiler-file-hash-cache.json: " ${{ hashFiles('out/build/**/vcpkg_installed/compiler-file-hash-cache.json') }}
-          echo "hash status:                        " ${{ hashFiles('out/build/**/vcpkg_installed/status') }}
-          echo "hash all:                           " ${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/**/CMakeCache.txt', 'out/build/**/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/**/vcpkg_installed/status') }}
+          bash "${{ github.workspace }}/.github/scripts/checkcache.sh" "${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/**/CMakeCache.txt', 'out/build/**/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/**/vcpkg_installed/status') }}" >> $GITHUB_OUTPUT
+      # save cache if warranted
+      - name: Update vcpkg cache (2/2)
+        if: ${{ steps.cache_vcpkg.outputs == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          key:
+            # only hash on files present without configure/build
+            cache-build-${{ matrix.triplet }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json') }}
+          path: |
+            ${{ github.workspace }}/cache_hash.txt
+            ${{ github.workspace }}/out/build/**/vcpkg_installed
+            ${{ github.workspace }}/vcpkg
