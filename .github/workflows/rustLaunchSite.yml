@@ -113,6 +113,12 @@ jobs:
           echo "VCPKG_ROOT=${VCPKG_ROOT}" | ${FIX_PATH} >> "${GITHUB_ENV}"
           export VCPKG_BOOT="./bootstrap-vcpkg${SCRIPT_EXT}"
           echo "VCPKG_BOOT=${VCPKG_BOOT}" | ${FIX_PATH} >> "${GITHUB_ENV}"
+          echo "hash CMakeFiles.txt:                " ${{ hashFiles('CMakeFiles.txt') }}
+          echo "hash CMakePresets.json:             " ${{ hashFiles('CMakePresets.json') }}
+          echo "hash vcpkg.json:                    " ${{ hashFiles('vcpkg.json') }}
+          echo "hash compiler-file-hash-cache.json: " ${{ hashFiles('out/build/*/vcpkg_installed/compiler-file-hash-cache.json') }}
+          echo "hash status:                        " ${{ hashFiles('out/build/*/vcpkg_installed/status') }}
+          echo "hash all:                           " ${{ hashFiles('CMakeFiles.txt', 'CMakePresets.json', 'vcpkg.json', 'out/build/*/vcpkg_installed/compiler-file-hash-cache.json', 'out/build/*/vcpkg_installed/status') }}
 
       # clone host repo
       - name: Clone git repos (1/3)
