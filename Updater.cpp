@@ -354,7 +354,7 @@ std::string RunExecutable(
   boost::asio::read(
     stdoutPipe, boost::asio::dynamic_buffer(output1), errorCode);
   // boost::asio::read(stderrPipe, boost::asio::dynamic_buffer(output2), errorCode);
-  proc.wait();
+  proc.wait(errorCode);
 
   LOGINF(logger, exe << " output:\n" << output1);
 
@@ -720,20 +720,20 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   ));
 
   const auto startPos(output.find("\"258550\""));
-  if (std::string::npos != startPos)
+  if (std::string::npos == startPos)
   {
-    //258550.depots.branches.<branch>.buildid
-    static const std::string PATH_PREFIX("258550.depots.branches.");
-    constexpr std::string_view DEFAULT_BRANCH("public");
-    static const std::string PATH_SUFFIX(".buildid");
-    return GetAppManifestValue(logger_, output.substr(startPos),
-      PATH_PREFIX +
-      std::string(branch.empty() ? DEFAULT_BRANCH : branch) +
-      PATH_SUFFIX);
+    LOGWRN(logger_, "Failed to extract latest server version from SteamCMD output (startPos=" << startPos << "):\n" << output);
+    return {};
   }
 
-  LOGWRN(logger_, "Failed to extract latest server version from SteamCMD output:\n" << output);
-  return {};
+  //258550.depots.branches.<branch>.buildid
+  static const std::string PATH_PREFIX("258550.depots.branches.");
+  constexpr std::string_view DEFAULT_BRANCH("public");
+  static const std::string PATH_SUFFIX(".buildid");
+  return GetAppManifestValue(logger_, output.substr(startPos),
+    PATH_PREFIX +
+    std::string(branch.empty() ? DEFAULT_BRANCH : branch) +
+    PATH_SUFFIX);
 }
 
 std::string Updater::GetLatestFrameworkURL() const
