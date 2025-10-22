@@ -412,7 +412,7 @@ std::string GetAppManifestValueCommon(
   return retVal;
 }
 
-std::string GetAppManifestValue(
+std::string GetAppManifestValueFromFile(
   rustLaunchSite::Logger& logger
 , const std::filesystem::path& appManifestPath
 , std::string_view keyPath
@@ -429,7 +429,7 @@ std::string GetAppManifestValue(
   );
 }
 
-std::string GetAppManifestValue(
+std::string GetAppManifestValueFromString(
   rustLaunchSite::Logger& logger
 , const std::string& appManifestData
 , std::string_view keyPath
@@ -684,7 +684,7 @@ std::string Updater::GetInstalledFrameworkVersion() const
 
 std::string Updater::GetInstalledServerBranch() const
 {
-  const auto& branch(GetAppManifestValue(
+  const auto& branch(GetAppManifestValueFromFile(
     logger_
   , appManifestPath_
   , "AppState.UserConfig.BetaKey"
@@ -695,7 +695,8 @@ std::string Updater::GetInstalledServerBranch() const
 
 std::string Updater::GetInstalledServerBuild() const
 {
-  return GetAppManifestValue(logger_, appManifestPath_, "AppState.buildid");
+  return GetAppManifestValueFromFile(
+    logger_, appManifestPath_, "AppState.buildid");
 }
 
 std::string Updater::GetLatestServerBuild(const std::string_view branch) const
@@ -707,7 +708,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     return {};
   }
 
-  const auto& output(RunExecutable(
+  std::string output(RunExecutable(
     logger_,
     steamCmdPath_.string(),
     {
@@ -718,6 +719,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
       "+quit"
     }
   ));
+  LOGINF(logger_, "SteamCMD output: " << output);
 
   const auto startPos(output.find("\"258550\""));
   if (std::string::npos == startPos)
@@ -725,15 +727,17 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     LOGWRN(logger_, "Failed to extract latest server version from SteamCMD output (startPos=" << startPos << "):\n" << output);
     return {};
   }
+  output = output.substr(startPos);
+  LOGINF(logger_, "Truncated SteamCMD output to startPos=" << startPos << ": " << output);
 
   //258550.depots.branches.<branch>.buildid
-  static const std::string PATH_PREFIX("258550.depots.branches.");
-  constexpr std::string_view DEFAULT_BRANCH("public");
-  static const std::string PATH_SUFFIX(".buildid");
-  return GetAppManifestValue(logger_, output.substr(startPos),
-    PATH_PREFIX +
-    std::string(branch.empty() ? DEFAULT_BRANCH : branch) +
-    PATH_SUFFIX);
+  output = GetAppManifestValueFromString(logger_, output,
+    "258550.depots.branches." +
+    std::string(branch.empty() ? "public" : branch) +
+    ".buildid");
+
+  LOGINF(logger_, "Extracted buildid from SteamCMD output: " << output);
+  return output;
 }
 
 std::string Updater::GetLatestFrameworkURL() const
