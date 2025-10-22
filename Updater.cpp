@@ -728,7 +728,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
       PATH_SUFFIX);
   }
 
-  LOGWRN(logger_, "Failed to extract latest server version from SteamCMD output");
+  LOGWRN(logger_, "Failed to extract latest server version from SteamCMD output:\n" << output);
   return {};
 }
 
