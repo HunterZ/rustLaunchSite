@@ -344,14 +344,17 @@ std::string RunExecutable(
   if (exe.empty()) return {};
 
   boost::asio::io_context ioContext;
-  // only read stdout for now because Boost.Process v2 is stupid
   boost::asio::readable_pipe stdoutPipe{ioContext};
+  boost::asio::readable_pipe stderrPipe{ioContext};
   boost::process::process proc(
-    ioContext, exe, args, boost::process::process_stdio{{}, stdoutPipe, nullptr}
+    ioContext, exe, args, boost::process::process_stdio{
+      {}, stdoutPipe, stderrPipe}
   );
-  std::string output;
+  std::string output1;
+  std::string output2;
   boost::system::error_code errorCode;
-  boost::asio::read(stdoutPipe, boost::asio::dynamic_buffer(output), errorCode);
+  boost::asio::read(stdoutPipe, boost::asio::dynamic_buffer(output1), errorCode);
+  boost::asio::read(stderrPipe, boost::asio::dynamic_buffer(output2), errorCode);
   proc.wait();
 
   // LOGINF(logger, exe << " output:\n" << output);
@@ -366,7 +369,8 @@ std::string RunExecutable(
     LOGWRN(logger, "Got nonzero exit code " << exitCode << " running " << exe);
   }
 
-  return output;
+  return !output1.empty() && output1.back() == '\n' ?
+    output1 + output2 : output1 + '\n' + output2;
 }
 
 template<typename TreeReadFunc>
