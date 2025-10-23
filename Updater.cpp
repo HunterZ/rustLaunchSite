@@ -4,6 +4,8 @@
 #include "Downloader.h"
 #include "Logger.h"
 
+#include "vdf_parser.hpp"
+
 #if _MSC_VER
   // make Boost happy when building with MSVC
   #include <sdkddkver.h>
@@ -16,14 +18,11 @@
 #include <boost/process/environment.hpp>
 #include <boost/process/stdio.hpp>
 #include <boost/process/process.hpp>
-#include <boost/property_tree/info_parser.hpp>
-#include <boost/property_tree/ptree.hpp>
 // these must be included after boost, because it #include's Windows.h
 #include <archive.h>
 #include <archive_entry.h>
 #include <nlohmann/json.hpp>
 #include <regex>
-#include <sstream>
 #include <stdexcept>
 #include <system_error>
 #include <vector>
@@ -377,52 +376,81 @@ template<typename TreeReadFunc>
 std::string GetAppManifestValueCommon(
   rustLaunchSite::Logger& logger
 , TreeReadFunc trf
-, std::string_view keyPath
+, const std::vector<std::string>& keyPath
 , const bool warn = true)
 {
-  std::string retVal;
-
   try
   {
-    boost::property_tree::ptree tree;
-    trf(tree);
-    retVal = tree.get<std::string>(keyPath.data());
+    const tyti::vdf::object& root(trf());
+    std::shared_ptr<tyti::vdf::object> child;
+    for (std::size_t i{0}; i < keyPath.size(); ++i)
+    {
+      const auto& entry(keyPath.at(i));
+      if (!i)
+      {
+        // just validate that the root node name matches the first key
+        if (entry == root.name)
+        {
+          continue;
+        }
+        if (warn)
+        {
+          LOGWRN(logger, "Root node name \"" << root.name << "\" does not match expected value \"" << entry << "\"; aborting");
+        }
+        return {};
+      }
+      // if this is the last entry, it must be an attribute
+      if (keyPath.size() - 1 == i)
+      {
+        if (1 == i)
+        {
+          // special case: path is only 2 keys long
+          return root.attribs.at(entry);
+        }
+        if (child)
+        {
+          return child->attribs.at(entry);
+        }
+        if (warn)
+        {
+          LOGWRN(logger, "No child node when processing finaly key \"" << entry << "\" of path");
+        }
+        return {};
+      }
+      // advance to child at next key
+      child = (child ? child->childs.at(entry) : root.childs.at(entry));
+    }
   }
-  catch (const boost::property_tree::ptree_bad_path& ex)
+  catch (const std::exception& ex)
   {
     if (warn)
     {
       LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
     }
-    retVal.clear();
-  }
-  catch (const std::exception& ex)
-  {
-    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    retVal.clear();
   }
   catch (...)
   {
-    LOGWRN(logger, "Unknown exception parsing server app manifest");
-    retVal.clear();
+    if (warn)
+    {
+      LOGWRN(logger, "Unknown exception parsing server app manifest");
+    }
   }
 
-  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
-
-  return retVal;
+  return {};
 }
 
 std::string GetAppManifestValueFromFile(
   rustLaunchSite::Logger& logger
 , const std::filesystem::path& appManifestPath
-, std::string_view keyPath
+, const std::vector<std::string>& keyPath
 , const bool warn = true)
 {
   return GetAppManifestValueCommon(
     logger,
-    [&appManifestPath](boost::property_tree::ptree& tree)
+    [&appManifestPath]()
     {
-      boost::property_tree::read_info(appManifestPath.string(), tree);
+      std::ifstream file(appManifestPath);
+      return tyti::vdf::read(file);
     },
     keyPath,
     warn
@@ -432,15 +460,15 @@ std::string GetAppManifestValueFromFile(
 std::string GetAppManifestValueFromString(
   rustLaunchSite::Logger& logger
 , const std::string& appManifestData
-, std::string_view keyPath
+, const std::vector<std::string>& keyPath
 , const bool warn = true)
 {
   return GetAppManifestValueCommon(
     logger,
-    [&appManifestData](boost::property_tree::ptree& tree)
+    [&appManifestData]()
     {
-      std::stringstream stream{appManifestData};
-      boost::property_tree::read_info(stream, tree);
+      return tyti::vdf::read(
+        std::cbegin(appManifestData), std::cend(appManifestData));
     },
     keyPath,
     warn
@@ -687,7 +715,7 @@ std::string Updater::GetInstalledServerBranch() const
   const auto& branch(GetAppManifestValueFromFile(
     logger_
   , appManifestPath_
-  , "AppState.UserConfig.BetaKey"
+  , { "AppState", "UserConfig",  "BetaKey" }
   , false));
   // clean installs may not have a branch listed in appmanifest; assume public
   return branch.empty() ? "public" : branch;
@@ -696,7 +724,7 @@ std::string Updater::GetInstalledServerBranch() const
 std::string Updater::GetInstalledServerBuild() const
 {
   return GetAppManifestValueFromFile(
-    logger_, appManifestPath_, "AppState.buildid");
+    logger_, appManifestPath_, { "AppState", "buildid" });
 }
 
 std::string Updater::GetLatestServerBuild(const std::string_view branch) const
@@ -715,7 +743,10 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
       "+force_install_dir", serverInstallPath_.string(),
       "+login", "anonymous",
       "+app_info_update", "1",
+      "+logoff",
+      "+login", "anonymous",
       "+app_info_print", "258550",
+      "+logoff",
       "+quit"
     }
   ));
@@ -731,10 +762,15 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   LOGINF(logger_, "Truncated SteamCMD output to startPos=" << startPos << ": " << output);
 
   //258550.depots.branches.<branch>.buildid
-  output = GetAppManifestValueFromString(logger_, output,
-    "258550.depots.branches." +
-    std::string(branch.empty() ? "public" : branch) +
-    ".buildid");
+  output = GetAppManifestValueFromString(
+    logger_,
+    output,
+    {
+      "258550", "depots", "branches",
+      std::string(branch.empty() ? "public" : branch),
+      "buildid"
+    }
+  );
 
   LOGINF(logger_, "Extracted buildid from SteamCMD output: " << output);
   return output;

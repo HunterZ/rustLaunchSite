@@ -6,7 +6,6 @@
     "boost-dll",
     "boost-filesystem",
     "boost-process",
-    "boost-property-tree",
     "curl",
     "ixwebsocket",
     "libarchive",

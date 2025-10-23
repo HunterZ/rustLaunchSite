@@ -59,6 +59,9 @@ if(DEFINED ENV{CI})
   FetchContent_Declare(SrvLib
     SOURCE_DIR "${PROJECT_SOURCE_DIR}/subprojects/SrvLib"
   )
+  FetchContent_Declare(ValveFileVDF
+    SOURCE_DIR "${PROJECT_SOURCE_DIR}/subprojects/ValveFileVDF"
+  )
 else()
   # normal case: clone the dependencies from github
   message("RLS: Assuming github dependencies need to be cloned")
@@ -70,8 +73,12 @@ else()
     GIT_REPOSITORY https://github.com/HunterZ/SrvLib.git
     GIT_TAG        master
   )
+  FetchContent_Declare(ValveFileVDF
+    GIT_REPOSITORY https://github.com/HunterZ/ValveFileVDF.git
+    GIT_TAG        master
+  )
 endif()
-FetchContent_MakeAvailable(ctrl-c SrvLib)
+FetchContent_MakeAvailable(ctrl-c SrvLib ValveFileVDF)
 
 set(RLS_COMPILE_FEATURES cxx_std_20)
 if(MSVC)
@@ -109,6 +116,7 @@ target_link_libraries(${RLS_OBJECT_TARGET} PRIVATE
   ixwebsocket::ixwebsocket
   LibArchive::LibArchive
   nlohmann_json::nlohmann_json
+  ValveFileVDF
 )
 target_link_options(${RLS_OBJECT_TARGET} PRIVATE ${RLS_LINK_OPTS})
 
