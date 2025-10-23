@@ -386,6 +386,7 @@ std::string GetAppManifestValueCommon(
     for (std::size_t i{0}; i < keyPath.size(); ++i)
     {
       const auto& entry(keyPath.at(i));
+      LOGINF(logger, "Processing keyPath[" << i << "]=" << entry);
       if (!i)
       {
         // just validate that the root node name matches the first key
@@ -405,10 +406,12 @@ std::string GetAppManifestValueCommon(
         if (1 == i)
         {
           // special case: path is only 2 keys long
+          LOGINF(logger, "Returning attribute for 2-key path: " << root.attribs.at(entry));
           return root.attribs.at(entry);
         }
         if (child)
         {
+          LOGINF(logger, "Returning attribute for " << keyPath.size() << "-key path: " << child->attribs.at(entry));
           return child->attribs.at(entry);
         }
         if (warn)
@@ -743,8 +746,6 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
       "+force_install_dir", serverInstallPath_.string(),
       "+login", "anonymous",
       "+app_info_update", "1",
-      "+logoff",
-      "+login", "anonymous",
       "+app_info_print", "258550",
       "+logoff",
       "+quit"
@@ -759,6 +760,8 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     return {};
   }
   output = output.substr(startPos);
+  const auto logoffPos(output.find("Logging off current session..."));
+  output = output.substr(0, logoffPos);
   LOGINF(logger_, "Truncated SteamCMD output to startPos=" << startPos << ": " << output);
 
   //258550.depots.branches.<branch>.buildid
