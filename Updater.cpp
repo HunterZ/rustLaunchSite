@@ -131,7 +131,7 @@ int CopyArchiveData(
       archive_write_data_block(aw.get(), buff, size, offset)};
     if (writeResult < ARCHIVE_OK)
     {
-      LOGINF(logger, "Failed to write extracted file data: " << archive_error_string(aw.get()));
+      LOGWRN(logger, "Failed to write extracted file data: " << archive_error_string(aw.get()));
       return static_cast<int>(writeResult);
     }
   }
@@ -355,7 +355,7 @@ std::string RunExecutable(
   // boost::asio::read(stderrPipe, boost::asio::dynamic_buffer(output2), errorCode);
   proc.wait(errorCode);
 
-  LOGINF(logger, exe << " output:\n" << output1);
+  // LOGINF(logger, exe << " output:\n" << output1);
 
   if (errorCode && boost::asio::error::eof != errorCode)
   {
@@ -386,7 +386,7 @@ std::string GetAppManifestValueCommon(
     for (std::size_t i{0}; i < keyPath.size(); ++i)
     {
       const auto& entry(keyPath.at(i));
-      LOGINF(logger, "Processing keyPath[" << i << "]=" << entry);
+      // LOGINF(logger, "Processing keyPath[" << i << "]=" << entry);
       if (!i)
       {
         // just validate that the root node name matches the first key
@@ -406,12 +406,12 @@ std::string GetAppManifestValueCommon(
         if (1 == i)
         {
           // special case: path is only 2 keys long
-          LOGINF(logger, "Returning attribute for 2-key path: " << root.attribs.at(entry));
+          // LOGINF(logger, "Returning attribute for 2-key path: " << root.attribs.at(entry));
           return root.attribs.at(entry);
         }
         if (child)
         {
-          LOGINF(logger, "Returning attribute for " << keyPath.size() << "-key path: " << child->attribs.at(entry));
+          // LOGINF(logger, "Returning attribute for " << keyPath.size() << "-key path: " << child->attribs.at(entry));
           return child->attribs.at(entry);
         }
         if (warn)
@@ -751,7 +751,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
       "+quit"
     }
   ));
-  LOGINF(logger_, "SteamCMD output: " << output);
+  // LOGINF(logger_, "SteamCMD output: " << output);
 
   const auto startPos(output.find("\"258550\""));
   if (std::string::npos == startPos)
@@ -762,7 +762,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
   output = output.substr(startPos);
   const auto logoffPos(output.find("Logging off current session..."));
   output = output.substr(0, logoffPos);
-  LOGINF(logger_, "Truncated SteamCMD output to startPos=" << startPos << ": " << output);
+  // LOGINF(logger_, "Truncated SteamCMD output to startPos=" << startPos << ": " << output);
 
   //258550.depots.branches.<branch>.buildid
   output = GetAppManifestValueFromString(
@@ -775,7 +775,7 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     }
   );
 
-  LOGINF(logger_, "Extracted buildid from SteamCMD output: " << output);
+  // LOGINF(logger_, "Extracted buildid from SteamCMD output: " << output);
   return output;
 }
 
