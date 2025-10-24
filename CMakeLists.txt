@@ -40,7 +40,7 @@ set(BOOST_USE_DEBUG_LIBS $<CONFIG:Debug>)
 set(BOOST_USE_RELEASE_LIBS $<NOT:$<CONFIG:Debug>>)
 
 # use config mode to prefer vcpkg versions
-find_package(Boost CONFIG REQUIRED COMPONENTS filesystem process)
+find_package(Boost CONFIG REQUIRED COMPONENTS asio filesystem process)
 find_package(CURL CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(LibArchive REQUIRED) # no config-mode file provided for this one
@@ -59,6 +59,9 @@ if(DEFINED ENV{CI})
   FetchContent_Declare(SrvLib
     SOURCE_DIR "${PROJECT_SOURCE_DIR}/subprojects/SrvLib"
   )
+  FetchContent_Declare(ValveFileVDF
+    SOURCE_DIR "${PROJECT_SOURCE_DIR}/subprojects/ValveFileVDF"
+  )
 else()
   # normal case: clone the dependencies from github
   message("RLS: Assuming github dependencies need to be cloned")
@@ -70,8 +73,12 @@ else()
     GIT_REPOSITORY https://github.com/HunterZ/SrvLib.git
     GIT_TAG        master
   )
+  FetchContent_Declare(ValveFileVDF
+    GIT_REPOSITORY https://github.com/HunterZ/ValveFileVDF.git
+    GIT_TAG        master
+  )
 endif()
-FetchContent_MakeAvailable(ctrl-c SrvLib)
+FetchContent_MakeAvailable(ctrl-c SrvLib ValveFileVDF)
 
 set(RLS_COMPILE_FEATURES cxx_std_20)
 if(MSVC)
@@ -101,6 +108,7 @@ add_library(${RLS_OBJECT_TARGET} OBJECT
 target_compile_features(${RLS_OBJECT_TARGET} PUBLIC ${RLS_COMPILE_FEATURES})
 target_compile_options(${RLS_OBJECT_TARGET} PRIVATE ${RLS_COMPILE_OPTIONS})
 target_link_libraries(${RLS_OBJECT_TARGET} PRIVATE
+  Boost::asio
   Boost::boost
   Boost::filesystem
   Boost::process
@@ -108,6 +116,7 @@ target_link_libraries(${RLS_OBJECT_TARGET} PRIVATE
   ixwebsocket::ixwebsocket
   LibArchive::LibArchive
   nlohmann_json::nlohmann_json
+  ValveFileVDF
 )
 target_link_options(${RLS_OBJECT_TARGET} PRIVATE ${RLS_LINK_OPTS})
 
@@ -148,6 +157,24 @@ add_custom_command(TARGET ${RLS_SERVICE_TARGET}
   COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
     ARGS "--strip-all" "$<TARGET_FILE:${RLS_SERVICE_TARGET}>"
 )
+
+# build test binaries
+# set(RLS_TEST_TARGET "rlsTest")
+# add_executable(${RLS_TEST_TARGET} GetVersions.cpp)
+# target_compile_features(${RLS_TEST_TARGET} PUBLIC ${RLS_COMPILE_FEATURES})
+# target_compile_options(${RLS_TEST_TARGET} PRIVATE ${RLS_COMPILE_OPTIONS})
+# target_link_libraries(${RLS_TEST_TARGET} PRIVATE
+#   ${RLS_OBJECT_TARGET}
+#   Boost::boost
+#   Boost::filesystem
+#   Boost::process
+# )
+# target_link_options(${RLS_TEST_TARGET} PRIVATE ${RLS_LINK_OPTS})
+# add_custom_command(TARGET ${RLS_TEST_TARGET}
+#   POST_BUILD
+#   COMMAND "$<$<NOT:$<CONFIG:Debug>>:${CMAKE_STRIP}>"
+#     ARGS "--strip-all" "$<TARGET_FILE:${RLS_TEST_TARGET}>"
+# )
 
 # include(GNUInstallDirs)
 # include(InstallRequiredSystemLibraries)

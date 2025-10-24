@@ -4,40 +4,32 @@
 #include "Downloader.h"
 #include "Logger.h"
 
+#include "vdf_parser.hpp"
+
 #if _MSC_VER
   // make Boost happy when building with MSVC
   #include <sdkddkver.h>
 #endif
 
-#include <boost/process/v1/args.hpp>
-#include <boost/process/v1/child.hpp>
-#include <boost/process/v1/error.hpp>
-#include <boost/process/v1/exe.hpp>
-#include <boost/process/v1/io.hpp>
-#include <boost/process/v1/pipe.hpp>
-#include <boost/process/v1/search_path.hpp>
-#include <boost/process/v1/system.hpp>
-#include <boost/property_tree/info_parser.hpp>
-#include <boost/property_tree/ptree.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/readable_pipe.hpp>
+#include <boost/process/environment.hpp>
+#include <boost/process/stdio.hpp>
+#include <boost/process/process.hpp>
 // these must be included after boost, because it #include's Windows.h
 #include <archive.h>
 #include <archive_entry.h>
-#include <fstream>
 #include <nlohmann/json.hpp>
-#include <sstream>
+#include <regex>
 #include <stdexcept>
 #include <system_error>
 #include <vector>
 
-#if _MSC_VER
-  #include <io.h> // _access_s()
-#else
-  #include <unistd.h> // access()
-#endif
-
 namespace
 {
-inline bool IsDirectory(const std::filesystem::path& path)
+bool IsDirectory(const std::filesystem::path& path)
 {
   const auto& targetPath(
     std::filesystem::is_symlink(path) ?
@@ -45,13 +37,6 @@ inline bool IsDirectory(const std::filesystem::path& path)
   );
   return std::filesystem::is_directory(targetPath);
 }
-
-enum class SteamCmdReadState
-{
-  FIND_INFO_START,
-  FIND_INFO_END,
-  COMPLETE
-};
 
 enum class ToStringCase
 {
@@ -146,7 +131,7 @@ int CopyArchiveData(
       archive_write_data_block(aw.get(), buff, size, offset)};
     if (writeResult < ARCHIVE_OK)
     {
-      LOGINF(logger, "Failed to write extracted file data: " << archive_error_string(aw.get()));
+      LOGWRN(logger, "Failed to write extracted file data: " << archive_error_string(aw.get()));
       return static_cast<int>(writeResult);
     }
   }
@@ -348,6 +333,150 @@ std::string_view GetFrameworkAsset(
   }
   return FRAMEWORK_ASSET.at(index);
 }
+
+template<typename P>
+std::string RunExecutable(
+  rustLaunchSite::Logger& logger,
+  const P& exe,
+  const std::vector<std::string>& args)
+{
+  if (exe.empty()) return {};
+
+  boost::asio::io_context ioContext;
+  boost::asio::readable_pipe stdoutPipe{ioContext};
+  // boost::asio::readable_pipe stderrPipe{ioContext};
+  boost::process::process proc(
+    ioContext, exe, args, boost::process::process_stdio{{}, stdoutPipe, {}});
+  std::string output1;
+  // std::string output2;
+  boost::system::error_code errorCode;
+  boost::asio::read(
+    stdoutPipe, boost::asio::dynamic_buffer(output1), errorCode);
+  // boost::asio::read(stderrPipe, boost::asio::dynamic_buffer(output2), errorCode);
+  proc.wait(errorCode);
+
+  // LOGINF(logger, exe << " output:\n" << output1);
+
+  if (errorCode && boost::asio::error::eof != errorCode)
+  {
+    LOGWRN(logger, "Got error code " << errorCode.value() << " / category " << errorCode.category().name() << " running " << exe << ": " << errorCode.message());
+  }
+  const auto exitCode(proc.exit_code());
+  if (proc.exit_code())
+  {
+    LOGWRN(logger, "Got nonzero exit code " << exitCode << " running " << exe);
+  }
+
+  // return !output1.empty() && output1.back() == '\n' ?
+  //   output1 + output2 : output1 + '\n' + output2;
+  return output1;
+}
+
+template<typename TreeReadFunc>
+std::string GetAppManifestValueCommon(
+  rustLaunchSite::Logger& logger
+, TreeReadFunc trf
+, const std::vector<std::string>& keyPath
+, const bool warn = true)
+{
+  try
+  {
+    const tyti::vdf::object& root(trf());
+    std::shared_ptr<tyti::vdf::object> child;
+    for (std::size_t i{0}; i < keyPath.size(); ++i)
+    {
+      const auto& entry(keyPath.at(i));
+      // LOGINF(logger, "Processing keyPath[" << i << "]=" << entry);
+      if (!i)
+      {
+        // just validate that the root node name matches the first key
+        if (entry == root.name)
+        {
+          continue;
+        }
+        if (warn)
+        {
+          LOGWRN(logger, "Root node name \"" << root.name << "\" does not match expected value \"" << entry << "\"; aborting");
+        }
+        return {};
+      }
+      // if this is the last entry, it must be an attribute
+      if (keyPath.size() - 1 == i)
+      {
+        if (1 == i)
+        {
+          // special case: path is only 2 keys long
+          // LOGINF(logger, "Returning attribute for 2-key path: " << root.attribs.at(entry));
+          return root.attribs.at(entry);
+        }
+        if (child)
+        {
+          // LOGINF(logger, "Returning attribute for " << keyPath.size() << "-key path: " << child->attribs.at(entry));
+          return child->attribs.at(entry);
+        }
+        if (warn)
+        {
+          LOGWRN(logger, "No child node when processing finaly key \"" << entry << "\" of path");
+        }
+        return {};
+      }
+      // advance to child at next key
+      child = (child ? child->childs.at(entry) : root.childs.at(entry));
+    }
+  }
+  catch (const std::exception& ex)
+  {
+    if (warn)
+    {
+      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
+    }
+  }
+  catch (...)
+  {
+    if (warn)
+    {
+      LOGWRN(logger, "Unknown exception parsing server app manifest");
+    }
+  }
+
+  return {};
+}
+
+std::string GetAppManifestValueFromFile(
+  rustLaunchSite::Logger& logger
+, const std::filesystem::path& appManifestPath
+, const std::vector<std::string>& keyPath
+, const bool warn = true)
+{
+  return GetAppManifestValueCommon(
+    logger,
+    [&appManifestPath]()
+    {
+      std::ifstream file(appManifestPath);
+      return tyti::vdf::read(file);
+    },
+    keyPath,
+    warn
+  );
+}
+
+std::string GetAppManifestValueFromString(
+  rustLaunchSite::Logger& logger
+, const std::string& appManifestData
+, const std::vector<std::string>& keyPath
+, const bool warn = true)
+{
+  return GetAppManifestValueCommon(
+    logger,
+    [&appManifestData]()
+    {
+      return tyti::vdf::read(
+        std::cbegin(appManifestData), std::cend(appManifestData));
+    },
+    keyPath,
+    warn
+  );
+}
 }
 
 namespace rustLaunchSite
@@ -516,60 +645,8 @@ void Updater::UpdateServer() const
   }
   args.emplace_back("validate");
   args.emplace_back("+quit");
-  std::error_code errorCode;
-  const int exitCode(boost::process::v1::system(
-    boost::process::v1::exe(steamCmdPath_.string()),
-    boost::process::v1::args(args),
-    boost::process::v1::error(errorCode)
-  ));
-  if (errorCode)
-  {
-    LOGWRN(logger_, "Error running server update command: " << errorCode.message());
-    return;
-  }
-  if (exitCode)
-  {
-    LOGWRN(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
-    return;
-  }
-}
 
-std::string Updater::GetAppManifestValue(
-  Logger& logger
-, const std::filesystem::path& appManifestPath
-, const std::string_view keyPath
-, const bool warn)
-{
-  std::string retVal{};
-
-  try
-  {
-    boost::property_tree::ptree tree;
-    boost::property_tree::read_info(appManifestPath.string(), tree);
-    retVal = tree.get<std::string>(keyPath.data());
-  }
-  catch (const boost::property_tree::ptree_bad_path& ex)
-  {
-    if (warn)
-    {
-      LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    }
-    retVal.clear();
-  }
-  catch (const std::exception& ex)
-  {
-    LOGWRN(logger, "Exception parsing server app manifest: " << ex.what());
-    retVal.clear();
-  }
-  catch (...)
-  {
-    LOGWRN(logger, "Unknown exception parsing server app manifest");
-    retVal.clear();
-  }
-
-  // LOGINF(logger_, "*** " << appManifestPath << " @ " << keyPath << " = " << retVal<< "");
-
-  return retVal;
+  RunExecutable(logger_, steamCmdPath_.string(), args);
 }
 
 std::string Updater::GetInstalledFrameworkVersion() const
@@ -577,103 +654,59 @@ std::string Updater::GetInstalledFrameworkVersion() const
   std::string retVal;
   if (frameworkDllPath_.empty()) { return retVal; }
 #if _MSC_VER || defined(__MINGW32__)
-  // run powershell and grab all output into inStream
-  boost::process::v1::ipstream inStream;
-  // for some reason boost requires explicitly requesting a PATH search unless
-  //  we want to pass the entire command as a single string
-  const auto& psPath{boost::process::v1::search_path("powershell.exe")};
+  // TODO: make powershell path configurable?
+  const auto& psPath(
+    boost::process::environment::find_executable("powershell.exe"));
   if (psPath.empty())
   {
-    LOGWRN(logger_, "Failed to find powershell");
+    LOGWRN(logger_, "Failed to find powershell; you may need to install mono-utils or similar");
     return retVal;
   }
-  std::error_code errorCode;
-  const int exitCode(boost::process::v1::system(
-    boost::process::v1::exe(psPath),
-    boost::process::v1::args({
+
+  retVal = RunExecutable(
+    logger_,
+    psPath,
+    {
       "-Command",
-      std::string("(Get-Item '") + frameworkDllPath_.string() +
+      "(Get-Item '" + frameworkDllPath_.string() +
         "').VersionInfo.ProductVersion"
-    }),
-    boost::process::v1::std_out > inStream,
-    boost::process::v1::error(errorCode)
-  ));
-  if (errorCode)
-  {
-    LOGWRN(logger_, "Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message());
-    return retVal;
-  }
-  if (exitCode)
-  {
-    LOGWRN(logger_, "Powershell returned nonzero exit code: " << exitCode);
-    return retVal;
-  }
-  // grab first line of output stream into retVal string
-  std::getline(inStream, retVal);
+    }
+  );
+
   // for some reason this has a newline at the end, so strip that off
   while (retVal.back() == '\r' || retVal.back() == '\n') { retVal.pop_back(); }
   // strip off anything starting with `+` or `-` if present
   return retVal.substr(0, retVal.find_first_of("+-"));
 #else
-  // run monodis and grab all output into inStream
-  boost::process::v1::ipstream inStream;
-  // for some reason boost requires explicitly requesting a PATH search unless
-  //  we want to pass the entire command as a single string
-  const auto& psPath{boost::process::v1::search_path("monodis")};
-  if (psPath.empty())
+  // TODO: make monodis path configurable?
+  const auto& monodisPath(
+    boost::process::environment::find_executable("monodis"));
+  if (monodisPath.empty())
   {
     LOGWRN(logger_, "Failed to find monodis; you may need to install mono-utils or similar");
     return retVal;
   }
-  std::error_code errorCode;
-  const int exitCode(boost::process::v1::system(
-    boost::process::v1::exe(psPath),
-    boost::process::v1::args({
-      "--assembly",
-      frameworkDllPath_.string()
-    }),
-    boost::process::v1::std_out > inStream,
-    boost::process::v1::error(errorCode)
-  ));
-  if (errorCode)
+
+  const auto& output(RunExecutable(
+    logger_, monodisPath, {"--assembly", frameworkDllPath_.string()}));
+
+  // attempt to extract version from output
+  std::smatch match;
+  if (std::regex_search(
+    output, match, std::regex{R"(Version: *[0-9]+\.[0-9]+\.[0-9]+)"}))
   {
-    LOGWRN(logger_, "Error running " << ToString(cfgSptr_->GetUpdateModFrameworkType(), ToStringCase::TITLE) << " version check command: " << errorCode.message());
-    return retVal;
-  }
-  if (exitCode)
-  {
-    LOGWRN(logger_, "" << psPath << " returned nonzero exit code: " << exitCode);
-    return retVal;
-  }
-  // find the line that begins with "Version:"
-  std::string line;
-  while (std::getline(inStream, line))
-  {
-    if (0 == line.find("Version:"))
+    const auto& matchStr(match.begin()->str());
+    std::smatch match2;
+    if (std::regex_search(
+      matchStr, match2, std::regex{R"([0-9]+\.[0-9]+\.[0-9]+)"}))
     {
-      // grab everything after "Version:" and after any spaces
-      retVal = line.substr(line.find_first_not_of(' ', 8));
-      break;
+      retVal = match2.begin()->str();
     }
   }
-  // chop off anything from the third version separator onwards (if present)
-  std::size_t sepCount{0};
-  std::size_t sepPos{};
-  for (std::size_t i{0}; i < retVal.length(); ++i)
+
+  if (retVal.empty())
   {
-    if ('.' == retVal.at(i))
-    {
-      ++sepCount;
-      if (3 == sepCount)
-      {
-        sepPos = i;
-        break;
-      }
-    }
-  }
-  if (sepCount > 2 && sepPos > 0)
-  {
-    retVal.resize(sepPos);
+    LOGWRN(logger_, "Failed to extract Carbon version from monodis output");
   }
   // return version number or empty string
   return retVal;
@@ -682,16 +715,19 @@ std::string Updater::GetInstalledFrameworkVersion() const
 
 std::string Updater::GetInstalledServerBranch() const
 {
-  return GetAppManifestValue(
+  const auto& branch(GetAppManifestValueFromFile(
     logger_
   , appManifestPath_
-  , "AppState.UserConfig.BetaKey"
-  , false);
+  , { "AppState", "UserConfig",  "BetaKey" }
+  , false));
+  // clean installs may not have a branch listed in appmanifest; assume public
+  return branch.empty() ? "public" : branch;
 }
 
 std::string Updater::GetInstalledServerBuild() const
 {
-  return GetAppManifestValue(logger_, appManifestPath_, "AppState.buildid");
+  return GetAppManifestValueFromFile(
+    logger_, appManifestPath_, { "AppState", "buildid" });
 }
 
 std::string Updater::GetLatestServerBuild(const std::string_view branch) const
@@ -702,122 +738,45 @@ std::string Updater::GetLatestServerBuild(const std::string_view branch) const
     LOGWRN(logger_, "Cannot check for server updates because install and/or steamcmd path is invalid");
     return {};
   }
-  // write a script for steamcmd to run
-  // this is needed because steamcmd acts very buggy when I try to use other
-  //  methods
-  // TODO: this should go in RLS' data directory, not the server's
-  const std::filesystem::path scriptFilePath
+
+  std::string output(RunExecutable(
+    logger_,
+    steamCmdPath_.string(),
+    {
+      "+force_install_dir", serverInstallPath_.string(),
+      "+login", "anonymous",
+      "+app_info_update", "1",
+      "+app_info_print", "258550",
+      "+logoff",
+      "+quit"
+    }
+  ));
+  // LOGINF(logger_, "SteamCMD output: " << output);
+
+  const auto startPos(output.find("\"258550\""));
+  if (std::string::npos == startPos)
   {
-    serverInstallPath_ / "steamcmd.scr"
-  };
-  std::ofstream scriptFile(scriptFilePath, std::ios::trunc);
-  if (!scriptFile.is_open())
-  {
-    LOGWRN(logger_, "Failed to open steamcmd script file `" << scriptFilePath << "`");
+    LOGWRN(logger_, "Failed to extract latest server version from SteamCMD output (startPos=" << startPos << "):\n" << output);
     return {};
   }
-  scriptFile
-    << "force_install_dir " << serverInstallPath_ << "\n"
-    << "login anonymous\n"
-    << "app_info_update 1\n"
-    << "app_info_print 258550\n"
-    << "quit\n"
-  ;
-  scriptFile.close();
-  // launch steamcmd and extract desired info
-  boost::process::v1::ipstream fromChild; // from child to RLS
-  std::error_code errorCode;
-  boost::process::v1::child sc(
-    boost::process::v1::exe(steamCmdPath_.string()),
-    boost::process::v1::args({"+runscript", scriptFilePath.string()}),
-    boost::process::v1::std_out > fromChild,
-    boost::process::v1::error(errorCode)
-  );
-  // this will hold the extracted info blob as a string
-  std::string steamInfo;
-  // this will hold the most recently read line of output from steamcmd
-  std::string line;
-  // track info blob extraction status
-  using enum SteamCmdReadState;
-  SteamCmdReadState readState(FIND_INFO_START);
-  // now process output from steamcmd one line at a time
-  // NOTE: Boost.Process docs say not to read from steam unless app is
-  //  running, but this truncates the output so F that - we do what works!
-  while (std::getline(fromChild, line))
-  {
-    bool appendLine(false);
-    if (line.empty()) continue;
-    switch (readState)
+  output = output.substr(startPos);
+  const auto logoffPos(output.find("Logging off current session..."));
+  output = output.substr(0, logoffPos);
+  // LOGINF(logger_, "Truncated SteamCMD output to startPos=" << startPos << ": " << output);
+
+  //258550.depots.branches.<branch>.buildid
+  output = GetAppManifestValueFromString(
+    logger_,
+    output,
     {
-      case FIND_INFO_START:
-      {
-        // looking for "258550" (in double quotes, at start of line)
-        if (!line.empty() && line[0] == '\"' && line.find("\"258550\"") == 0)
-        {
-          appendLine = true;
-          readState = FIND_INFO_END;
-        }
-        break;
-      }
-      case FIND_INFO_END:
-      {
-        // append all lines in this mode
-        appendLine = true;
-        // looking for "}" as the first character to signal info blob end
-        if (!line.empty() && line[0] == '}')
-        {
-          readState = COMPLETE;
-        }
-        break;
-      }
-      case COMPLETE:
-      {
-        appendLine = false;
-        break;
-      }
+      "258550", "depots", "branches",
+      std::string(branch.empty() ? "public" : branch),
+      "buildid"
     }
-    if (appendLine)
-    {
-      steamInfo.append(line).append("\n");
-    }
-  }
-  sc.wait(errorCode);
-  // report any process errors
-  if (errorCode)
-  {
-    LOGWRN(logger_, "Error running server update command: " << errorCode.message() << "");
-  }
-  if (const auto exitCode{sc.exit_code()}; exitCode)
-  {
-    LOGWRN(logger_, "SteamCMD returned nonzero exit code: " << exitCode);
-  }
-  // audit output
-  if (readState != COMPLETE)
-  {
-    LOGWRN(logger_, "SteamCMD output did not include a valid app info tree");
-    return {};
-  }
-  // process output
-  std::stringstream ss(steamInfo);
-  try
-  {
-    boost::property_tree::ptree tree;
-    boost::property_tree::read_info(ss, tree);
-    return tree.get<std::string>(
-      std::string{"258550.depots.branches."} +
-      (branch.empty() ? "public" : branch.data()) +
-      ".buildid"
   );
-  }
-  catch (const std::exception& ex)
-  {
-    LOGWRN(logger_, "Exception parsing SteamCMD output: " << ex.what()<< "");
-  }
-  catch (...)
-  {
-    LOGWRN(logger_, "Unknown exception parsing SteamCMD output");
-  }
-  return {};
+
+  // LOGINF(logger_, "Extracted buildid from SteamCMD output: " << output);
+  return output;
 }
 
 std::string Updater::GetLatestFrameworkURL() const
@@ -871,6 +830,11 @@ std::string Updater::GetLatestFrameworkVersion() const
   try
   {
     const auto& j(nlohmann::json::parse(frameworkInfo));
+    if (!j.contains("name"))
+    {
+      LOGWRN(logger_, "Data received from frameworkURL=" << frameworkURL << " missing JSON 'name': " << frameworkInfo);
+      return {};
+    }
     switch (modFrameworkType)
     {
       case Config::ModFrameworkType::NONE: break;
