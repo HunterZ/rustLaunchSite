@@ -184,7 +184,7 @@ jobs:
           cmake --build --preset "${{ matrix.triplet }}-${{ matrix.buildtype }}" --target install
 
       - name: Package and upload project
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: "${{ github.workflow }}-${{ github.job }}-${{ github.run_number }}-${{ github.run_id }}-${{ matrix.os }}-${{ matrix.triplet }}-${{ matrix.buildtype }}"
           path: "${{ github.workspace }}/out/install/${{ matrix.triplet }}"
