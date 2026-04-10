@@ -161,7 +161,7 @@ jobs:
           show-progress: true
           lfs: false
       - name: Setup vcpkg (3/4)
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
