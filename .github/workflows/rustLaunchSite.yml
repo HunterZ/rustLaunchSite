@@ -116,22 +116,22 @@ jobs:
 
       # clone host repo
       - name: Clone git repos (1/4)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       # clone ctrl-c dependency repo
       - name: Clone git repos (2/4)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: HunterZ/ctrl-c
           path: subprojects/ctrl-c
       # clone SrvLib dependency repo
       - name: Clone git repos (3/4)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: HunterZ/SrvLib
           path: subprojects/SrvLib
       # clone ValveFileVDF dependency repo
       - name: Clone git repos (4/4)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: HunterZ/ValveFileVDF
           path: subprojects/ValveFileVDF
@@ -153,7 +153,7 @@ jobs:
             ${{ github.workspace }}/out/build/**/vcpkg_installed
             ${{ github.workspace }}/vcpkg
       - name: Setup vcpkg (2/4)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: Microsoft/vcpkg
           path: vcpkg
