@@ -141,7 +141,7 @@ jobs:
       # note that build type isn't considered in the cache key, because I now
       #  force use of release-flavored dependencies
       - name: Setup vcpkg (1/4)
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           key:
             # only hash on files present without configure/build
@@ -199,7 +199,7 @@ jobs:
       # save cache if warranted
       - name: Update vcpkg cache (2/2)
         if: ${{ steps.cache_vcpkg.outputs.CHECK_OUTPUT == 'true' }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           key:
             # only hash on files present without configure/build
